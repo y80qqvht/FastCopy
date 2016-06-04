@@ -187,6 +187,7 @@ protected:
 	TEditSub		errEdit;
 	HFONT			statusFont;
 	LOGFONTW		statusLogFont;
+	ITaskbarList3	*taskbarList;
 
 protected:
 	BOOL	SetCopyModeList(void);

@@ -697,7 +697,7 @@ BOOL ReadLink(char *src, char *dest, char *arg=NULL)
 	if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink,
 			(void **)&shellLink))) {
 		if (SUCCEEDED(shellLink->QueryInterface(IID_IPersistFile, (void **)&persistFile))) {
-			AtoW(src, wbuf, MAX_PATH);
+			AtoW(src, wbuf, wsizeof(wbuf));
 			if (SUCCEEDED(persistFile->Load(wbuf, STGM_READ))) {
 				if (SUCCEEDED(shellLink->GetPath(dest, MAX_PATH, NULL, 0))) {
 					if (arg) {

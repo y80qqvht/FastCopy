@@ -1,5 +1,5 @@
 ﻿======================================================================
-                   FastCopy  ver3.11                   2015/12/06
+                   FastCopy  ver3.13                   2016/03/15
                                                  SHIROUZU Hiroaki
 ======================================================================
 
@@ -16,7 +16,7 @@
 License:
 	-------------------------------------------------------------------------
 	 FastCopy ver3.0
-	 Copyright(C) 2004-2015 SHIROUZU Hiroaki All rights reserved.
+	 Copyright(C) 2004-2016 SHIROUZU Hiroaki All rights reserved.
 
 	 This program is free software. You can redistribute it and/or modify
 	 it under the GNU General Public License version 3.

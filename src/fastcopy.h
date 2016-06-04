@@ -1,9 +1,9 @@
 ﻿/* static char *fastcopy_id = 
-	"@(#)Copyright (C) 2004-2015 H.Shirouzu		fastcopy.h	Ver3.11"; */
+	"@(#)Copyright (C) 2004-2016 H.Shirouzu		fastcopy.h	Ver3.12"; */
 /* ========================================================================
 	Project  Name			: Fast Copy file and directory
 	Create					: 2004-09-15(Wed)
-	Update					: 2015-12-05(Sa)
+	Update					: 2016-01-02(Sat)
 	Copyright				: H.Shirouzu
 	License					: GNU General Public License version 3
 	======================================================================== */
@@ -500,6 +500,7 @@ protected:
 	int64	timeDiffGrace;
 	BOOL	enableAcl;
 	BOOL	enableStream;
+	BOOL	enableBackupPriv;
 
 	// セクタ情報など
 	int		srcSectorSize;
