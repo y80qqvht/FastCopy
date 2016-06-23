@@ -6,13 +6,13 @@
     </TN>
     <MS>
       <S N="Vary">Accept-Encoding</S>
-      <S N="Last-Modified">Thu, 16 Jun 2016 16:51:21 GMT</S>
-      <S N="ETag">"14860-535680c319440"</S>
+      <S N="Last-Modified">Wed, 22 Jun 2016 06:40:59 GMT</S>
+      <S N="ETag">"1485a-535d83871a038"</S>
       <S N="Keep-Alive">timeout=15, max=100</S>
-      <S N="Content-Length">84064</S>
+      <S N="Content-Length">84058</S>
       <S N="Accept-Ranges">bytes</S>
       <S N="Content-Type">text/html</S>
-      <S N="Date">Fri, 17 Jun 2016 13:30:37 GMT</S>
+      <S N="Date">Thu, 23 Jun 2016 15:49:00 GMT</S>
       <S N="Server">Apache</S>
       <S N="Connection">Keep-Alive</S>
     </MS>
