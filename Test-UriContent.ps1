@@ -31,6 +31,7 @@ Param (
 [System.Net.HttpWebRequest] $req =
     [System.Net.WebRequest]::Create($Uri) -as [System.Net.HttpWebRequest]
 
+$req.AllowAutoRedirect = $false
 $req.Timeout = 10000
 $req.Method = 'HEAD'
 $req.Accept = 'text/html'
