@@ -20,7 +20,7 @@ System.Net.HttpStatusCode。
 Param (
     [Parameter(Position = 0)]
     [ValidateNotNullOrEmpty()]
-    [System.String] $Uri = 'http://ipmsg.org/tools/fastcopy.html',
+    [System.String] $Uri = 'https://ipmsg.org/tools/fastcopy.html',
 
     [Parameter(Position = 1)]
     [ValidateNotNullOrEmpty()]
