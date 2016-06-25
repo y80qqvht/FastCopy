@@ -20,7 +20,7 @@ System.Net.HttpStatusCode。
 Param (
     [Parameter(Position = 0)]
     [ValidateNotNullOrEmpty()]
-    [System.String] $Uri = 'http://ipmsg.org/tools/fastcopy.html',
+    [System.String] $Uri = 'https://ipmsg.org/tools/fastcopy.html',
 
     [Parameter(Position = 1)]
     [ValidateNotNullOrEmpty()]
@@ -31,6 +31,7 @@ Param (
 [System.Net.HttpWebRequest] $req =
     [System.Net.WebRequest]::Create($Uri) -as [System.Net.HttpWebRequest]
 
+$req.AllowAutoRedirect = $false
 $req.Timeout = 10000
 $req.Method = 'HEAD'
 $req.Accept = 'text/html'
