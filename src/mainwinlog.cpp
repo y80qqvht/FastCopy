@@ -26,7 +26,7 @@ BOOL TMainDlg::StartFileLog()
 	if (fileLogMode == NO_FILELOG || (!isListLog && IsListing())) return FALSE;
 
 	if (fileLogMode == AUTO_FILELOG || wcschr(fileLogPath, '\\') == 0) {
-		MakePathW(logDir, cfg.userDir, GetLoadStrW(IDS_FILELOG_SUBDIR));
+		MakePathW(logDir, cfg.userDir, LoadStrW(IDS_FILELOG_SUBDIR));
 		if (::GetFileAttributesW(logDir) == 0xffffffff)
 			::CreateDirectoryW(logDir, NULL);
 
@@ -39,7 +39,7 @@ BOOL TMainDlg::StartFileLog()
 	if (fileLogMode == AUTO_FILELOG || *fileLogPath == 0) {
 		SYSTEMTIME	st = startTm;
 		for (int i=0; i < 100; i++) {
-			swprintf(wbuf, GetLoadStrW(IDS_FILELOGNAME),
+			swprintf(wbuf, LoadStrW(IDS_FILELOGNAME),
 				st.wYear, st.wMonth, st.wDay, st.wHour,
 				st.wMinute, st.wSecond, i);
 			MakePathW(fileLogPath, logDir, wbuf);

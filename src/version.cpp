@@ -1,10 +1,10 @@
 ﻿static char *version_id = 
-	"@(#)Copyright (C) 2004-2016 H.Shirouzu	Version.cpp ver3.13";
+	"@(#)Copyright (C) 2004-2016 H.Shirouzu	Version.cpp ver3.21";
 /* ========================================================================
 	Project  Name			: Fast/Force copy file and directory
 	Module Name				: Version
 	Create					: 2010-06-13(Sun)
-	Update					: 2016-01-02(Sat)
+	Update					: 2016-09-28(Wed)
 	Copyright				: H.Shirouzu
 	License					: GNU General Public License version 3
 	======================================================================== */
@@ -23,21 +23,28 @@ static char admin_str[32];
 void SetVersionStr(BOOL is_admin, BOOL is_noui)
 {
 	sprintf(version_str, "%.20s", strstr(version_id, "ver"));
-	if (is_admin) strcpy(admin_str, " (Admin)");
-	if (is_noui) strcpy(admin_str, " (NoUI)");
+
+	if (is_admin) {
+		strcpy(admin_str, " (Admin)");
+	}
+	if (is_noui) {
+		strcpy(admin_str, " (NoUI)");
+	}
 }
 
 const char *GetVersionStr()
 {
-	if (version_str[0] == 0)
+	if (version_str[0] == 0) {
 		SetVersionStr();
+	}
 	return	version_str;
 }
 
 const char *GetVerAdminStr()
 {
-	if (admin_str[0] == 0)
+	if (admin_str[0] == 0) {
 		SetVersionStr();
+	}
 	return	admin_str;
 }
 
