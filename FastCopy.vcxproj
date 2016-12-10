@@ -320,7 +320,10 @@
     </Manifest>
   </ItemGroup>
   <ItemGroup>
+    <Image Include="fastcopy.bmp" />
+    <Image Include="src\fastcopy.bmp" />
     <Image Include="src\fastcopy.ico" />
+    <Image Include="src\fastcopy.png" />
     <Image Include="src\fastcopy2.ico" />
     <Image Include="src\fastcopy3.ico" />
     <Image Include="src\fastcopy4.ico" />

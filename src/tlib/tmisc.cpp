@@ -739,6 +739,7 @@ static char *ExceptionVerInfo;
 static char *ExceptionTrace;
 static char *ExceptionTracePtr;
 static char *ExceptionTraceEnd;
+static void *ExceptionModAddr;
 static SYSTEMTIME ExceptionTm;
 
 #define STACKDUMP_SIZE			256
@@ -851,10 +852,11 @@ LONG WINAPI Local_UnhandledExceptionFilter(struct _EXCEPTION_POINTERS *info)
 		" Date        : %d/%02d/%02d %02d:%02d:%02d\r\n"
 		" Start       : %d/%02d/%02d %02d:%02d:%02d\r\n"
 		" OS Infos    : %.100s\r\n"
+		" Mod Addr    : %p\r\n"
 			, ExceptionTitle
 			, tm.wYear,  tm.wMonth,  tm.wDay,  tm.wHour,  tm.wMinute,  tm.wSecond
 			, stm.wYear, stm.wMonth, stm.wDay, stm.wHour, stm.wMinute, stm.wSecond
-			, ExceptionVerInfo);
+			, ExceptionVerInfo, ExceptionModAddr);
 	::WriteFile(hFile, buf, len, &len, 0);
 
 	if (info) {
@@ -1007,6 +1009,8 @@ BOOL InstallExceptionFilter(const char *title, const char *info, const char *fna
 		ovi.dwMajorVersion, ovi.dwMinorVersion, ovi.dwBuildNumber,
 		ovi.wServicePackMajor, ovi.wServicePackMinor, ovi.wSuiteMask);
 	ExceptionVerInfo = strdup(buf);
+
+	ExceptionModAddr = (void *)::GetModuleHandle(NULL);
 
 	::SetUnhandledExceptionFilter(&Local_UnhandledExceptionFilter);
 	return	TRUE;
@@ -1537,25 +1541,36 @@ BOOL GetParentDirU8(const char *org_path, char *target_dir)
 #include <htmlhelp.h>
 
 static HWND (WINAPI *pHtmlHelpW)(HWND, WCHAR *, UINT, DWORD_PTR) = NULL;
-BOOL InitHtmlHelpCore()
-{
-	DWORD		cookie=0;
-	HMODULE		hHtmlHelp = TLoadLibrary("hhctrl.ocx");
-	if (hHtmlHelp)
-		pHtmlHelpW = (HWND (WINAPI *)(HWND, WCHAR *, UINT, DWORD_PTR))
-					::GetProcAddress(hHtmlHelp, "HtmlHelpW");
-
-	if (pHtmlHelpW) {
-		pHtmlHelpW(NULL, NULL, HH_INITIALIZE, (DWORD_PTR)&cookie);
-	}
-
-	return	pHtmlHelpW ? TRUE : FALSE;;
-}
+static DWORD	htmlCookie;
+static HMODULE	hHtmlHelp;
 
 BOOL InitHtmlHelp()
 {
-	static BOOL	ret = InitHtmlHelpCore();
-	return	ret;
+	if (!hHtmlHelp) {
+		hHtmlHelp = TLoadLibrary("hhctrl.ocx");
+	}
+	if (hHtmlHelp && !pHtmlHelpW) {
+		pHtmlHelpW = (HWND (WINAPI *)(HWND, WCHAR *, UINT, DWORD_PTR))
+			::GetProcAddress(hHtmlHelp, "HtmlHelpW");
+	}
+	if (pHtmlHelpW) {
+		htmlCookie = 0;
+		pHtmlHelpW(NULL, NULL, HH_INITIALIZE, (DWORD_PTR)&htmlCookie);
+		return	TRUE;
+	}
+	return	FALSE;
+}
+
+void UnInitHtmlHelp()
+{
+	if (hHtmlHelp) {
+		if (pHtmlHelpW) {
+			pHtmlHelpW(NULL, NULL, HH_UNINITIALIZE, htmlCookie);
+			pHtmlHelpW = NULL;
+		}
+		::FreeLibrary(hHtmlHelp);
+		hHtmlHelp = NULL;
+	}
 }
 
 #endif
@@ -1609,6 +1624,14 @@ HWND ShowHelpU8(HWND hOwner, const char *help_dir, const char *help_file, const 
 	Wstr	sec(section);
 
 	return	ShowHelpW(hOwner, dir.Buf(), file.Buf(), sec.Buf());
+}
+
+void UnInitShowHelp()
+{
+#if defined(ENABLE_HTML_HELP)
+	CloseHelpAll();
+	UnInitHtmlHelp();
+#endif
 }
 
 //#define MAGIC_NTZ 0x03F566ED27179461ULL
@@ -2421,5 +2444,54 @@ void TGsFailureHack()
 #endif
 }
 #endif
+
+
+/*
+	マスク情報をアルファ値として引き継ぐ形でDIBSectionを作成
+	主に、SetMenuItemBitmaps用（GDI+なら Bitmap::FromFile(icon) で簡単…）
+	今のところ、意図的に GetIconInfo は使わず、cx/cyはユーザ指定させる
+*/
+HBITMAP TIconToBmp(HICON hIcon, int cx, int cy)
+{
+	BITMAPINFO	bmi = {};
+	bmi.bmiHeader.biSize     = sizeof(BITMAPINFOHEADER);
+	bmi.bmiHeader.biWidth    = cx;
+	bmi.bmiHeader.biHeight   = cy;
+	bmi.bmiHeader.biPlanes   = 1;
+	bmi.bmiHeader.biBitCount = 32;
+
+	HDC		hBmpDc = ::CreateCompatibleDC(NULL);
+	HDC		hTmpDc = ::CreateCompatibleDC(NULL);
+	void	*dat = NULL;
+	void	*tmp = NULL;
+	HBITMAP	hBmp = ::CreateDIBSection(NULL, &bmi, DIB_RGB_COLORS, &dat, 0, 0);
+	HBITMAP hTmp = ::CreateDIBSection(NULL, &bmi, DIB_RGB_COLORS, &tmp, 0, 0);
+	HGDIOBJ	hBmpSv = ::SelectObject(hBmpDc, hBmp);
+	HGDIOBJ	hTmpSv = ::SelectObject(hTmpDc, hTmp);
+
+	::DrawIconEx(hBmpDc, 0, 0, hIcon, cx, cy, 0, 0, DI_NORMAL);
+	::DrawIconEx(hTmpDc, 0, 0, hIcon, cx, cy, 0, 0, DI_MASK);
+
+	for (int i=0; i < cy; i++) {
+		for (int j=0; j < cx; j++) {
+			if (((BYTE *)tmp)[(i*cx + j) * 4] == 0) {
+				((BYTE *)dat)[(i*cx + j) * 4 + 3] = 0xff;
+			}
+//			for (int k=0; k < 4; k++) {
+//				Debug("%02x:", ((BYTE *)dat)[(i*cx + j) * 4 + k]);
+//			}
+//			Debug(" ");
+		}
+//		Debug("\n");
+	}
+
+	::SelectObject(hBmpDc, hBmpSv);
+	::SelectObject(hTmpDc, hTmpSv);
+	::DeleteDC(hBmpDc);
+	::DeleteDC(hTmpDc);
+
+	::DeleteObject(hTmp);
+	return	hBmp;
+}
 
 
