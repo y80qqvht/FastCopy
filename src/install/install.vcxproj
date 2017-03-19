@@ -84,7 +84,7 @@
     <OutDir>..\..\Debug\</OutDir>
     <IntDir>..\..\Obj\DebugInst\</IntDir>
     <LinkIncremental>true</LinkIncremental>
-    <TargetName>setup.exe</TargetName>
+    <TargetName>setup</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>..\..\x64\Obj\DebugInst\</OutDir>

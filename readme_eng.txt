@@ -1,5 +1,5 @@
 ﻿======================================================================
-                   FastCopy  ver3.27                   2017/01/23
+                   FastCopy  ver3.30                   2017/03/06
                                                  SHIROUZU Hiroaki
 ======================================================================
 
@@ -26,6 +26,9 @@ License:
 
 	 more details: license-gpl3.txt
 	-------------------------------------------------------------------------
+
+	xxHash library Copyright (C) 2012-2014 Mr.Yann Collet, All rights reserved.
+	  more details: external/xxhash/LICENSE
 
 Usage：
 	Please see fastcopy.chm
