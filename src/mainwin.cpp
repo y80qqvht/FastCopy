@@ -1,14 +1,15 @@
 ﻿static char *mainwin_id = 
-	"@(#)Copyright (C) 2004-2017 H.Shirouzu		mainwin.cpp	ver3.31";
+	"@(#)Copyright (C) 2004-2018 H.Shirouzu		mainwin.cpp	ver3.41";
 /* ========================================================================
 	Project  Name			: Fast/Force copy file and directory
 	Create					: 2004-09-15(Wed)
-	Update					: 2017-07-30(Sun)
+	Update					: 2018-01-25(Thu)
 	Copyright				: H.Shirouzu
 	License					: GNU General Public License version 3
 	======================================================================== */
 
 #include "mainwin.h"
+#include <time.h>
 #include "shellext/shelldef.h"
 
 #define FASTCOPY_TIMER_TICK 250
@@ -483,6 +484,7 @@ BOOL TMainDlg::EvCreate(LPARAM lParam)
 	if (is_elevated_admin || isNoUI) {
 		SetVersionStr(is_elevated_admin, isNoUI);
 	}
+	::DragAcceptFiles(hWnd, TRUE);
 
 	char	title[100];
 	sprintf(title, "%s %s%s", FASTCOPY_TITLE, GetVersionStr(), GetVerAdminStr());
@@ -651,6 +653,16 @@ BOOL TMainDlg::EvCreate(LPARAM lParam)
 	}
 	else {
 		Show();
+
+		if (cfg.updCheck) {	// 最新版確認
+			time_t	now = time(NULL);
+
+			if (cfg.lastUpdCheck + (24 * 3600) < now) {	// 1日以上経過
+				cfg.lastUpdCheck = now;
+				cfg.WriteIni();
+				UpdateCheck(TRUE);
+			}
+		}
 	}
 
 	return	TRUE;
@@ -691,7 +703,7 @@ BOOL TMainDlg::CancelCopy()
 			EndCopy();
 		}
 		else {
-			SetTimer(FASTCOPY_TIMER, FASTCOPY_TIMER_TICK*2, NULL);
+			SetTimer(FASTCOPY_TIMER, FASTCOPY_TIMER_TICK*2);
 		}
 	}
 	else {
@@ -702,7 +714,7 @@ BOOL TMainDlg::CancelCopy()
 			fastCopy.Aborting();
 		}
 		else {
-			SetTimer(FASTCOPY_TIMER, FASTCOPY_TIMER_TICK, NULL);
+			SetTimer(FASTCOPY_TIMER, FASTCOPY_TIMER_TICK);
 		}
 	}
 
@@ -711,7 +723,8 @@ BOOL TMainDlg::CancelCopy()
 
 BOOL TMainDlg::SwapTargetCore(const WCHAR *s, const WCHAR *d, WCHAR *out_s, WCHAR *out_d)
 {
-	WCHAR	*src_fname = NULL, *dst_fname = NULL;
+	WCHAR	*src_fname = NULL;
+	WCHAR	*dst_fname = NULL;
 	BOOL	isSrcLastBS = s[wcslen(s) - 1] == '\\'; // 95系は無視...
 	BOOL	isDstLastBS = d[wcslen(d) - 1] == '\\';
 	BOOL	isSrcRoot = FALSE;
@@ -780,7 +793,7 @@ BOOL TMainDlg::SwapTarget(BOOL check_only)
 	DWORD	src_len = ::GetWindowTextLengthW(GetDlgItem(SRC_EDIT));
 	DWORD	dst_len = ::GetWindowTextLengthW(GetDlgItem(DST_COMBO));
 
-	if (src_len == 0 && dst_len == 0) return FALSE;
+	if (src_len == 0 && dst_len == 0 || max(src_len, dst_len) >= MAX_WPATH) return FALSE;
 
 	WCHAR		*src = new WCHAR [MAX_WPATH];
 	WCHAR		*dst = new WCHAR [MAX_WPATH];
@@ -1232,10 +1245,13 @@ void TMainDlg::SetHistPath(int idx)
 
 BOOL TMainDlg::EvSize(UINT fwSizeType, WORD nWidth, WORD nHeight)
 {
-	if (fwSizeType != SIZE_RESTORED && fwSizeType != SIZE_MAXIMIZED)
+	if (fwSizeType != SIZE_RESTORED && fwSizeType != SIZE_MAXIMIZED) {
 		return	FALSE;
+	}
 
 	RefreshWindow();
+	SetTimer(FASTCOPY_PAINT_TIMER, 100);
+
 	return	TRUE;
 }
 
@@ -1417,6 +1433,9 @@ void TMainDlg::RefreshWindow(BOOL is_start_stop)
 	set_fitskip(&dlgItems[verify_item].flags, is_del_test);
 	set_fitskip(&dlgItems[estimate_item].flags, is_del_test);
 	set_fitskip(&dlgItems[owdel_item].flags, !is_delete);
+
+	set_fitskip(&dlgItems[acl_item].flags, is_del_test);
+	set_fitskip(&dlgItems[stream_item].flags, is_del_test);
 
 	set_fitskip(&dlgItems[ok_item].flags, is_exec && IsListing());
 	set_fitskip(&dlgItems[list_item].flags, is_exec && !IsListing());
@@ -1858,10 +1877,9 @@ BOOL TMainDlg::ExecCopy(DWORD exec_flags)
 
 	info.bufSize		= (size_t)GetDlgItemInt(BUFSIZE_EDIT) * 1024 * 1024;
 	info.maxRunNum		= MaxRunNum();
-	info.maxTransSize	= (size_t)cfg.maxTransSize * 1024 * 1024;
 	info.netDrvMode		= cfg.netDrvMode;
 	info.aclReset		= cfg.aclReset;
-	info.maxOvlSize		= cfg.maxOvlSize > 0 ? (cfg.maxOvlSize * 1024 * 1024) : 0;
+	info.maxOvlSize		= (size_t)cfg.maxOvlSize * 1024 * 1024;
 	info.maxOvlNum		= cfg.maxOvlNum;
 	info.maxOpenFiles	= cfg.maxOpenFiles;
 	info.maxAttrSize	= (size_t)cfg.maxAttrSize * 1024 * 1024;
@@ -2114,7 +2132,7 @@ BOOL TMainDlg::ExecCopy(DWORD exec_flags)
 			isDelay = TRUE;
 			SetDlgItemText(STATUS_EDIT, LoadStr(ci.all_running >= MaxRunNum() ?
 				IDS_WAIT_MANYPROC : IDS_WAIT_ACQUIREDRV));
-			SetTimer(FASTCOPY_TIMER, FASTCOPY_TIMER_TICK*2, NULL);
+			SetTimer(FASTCOPY_TIMER, FASTCOPY_TIMER_TICK*2);
 			if (isTaskTray) {
 				TaskTray(NIM_MODIFY, hMainIcon[FCWAIT_ICON_IDX], FASTCOPY);
 			}
@@ -2158,7 +2176,7 @@ BOOL TMainDlg::ExecCopyCore(void)
 		RefreshWindow(TRUE);
 		timerCnt = timerLast = 0;
 		::GetCursorPos(&curPt);
-		SetTimer(FASTCOPY_TIMER, FASTCOPY_TIMER_TICK, NULL);
+		SetTimer(FASTCOPY_TIMER, FASTCOPY_TIMER_TICK);
 		UpdateSpeedLevel();
 	}
 	return	ret;
@@ -2490,28 +2508,39 @@ BOOL TMainDlg::EventSystem(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 BOOL TMainDlg::EvTimer(WPARAM timerID, TIMERPROC proc)
 {
-	timerCnt++;
+	if (timerID == FASTCOPY_TIMER) {
+		timerCnt++;
 
-	if (isDelay) {
-		ShareInfo::CheckInfo	ci;
-		if (fastCopy.TakeExclusivePriv(forceStart, &ci)) {
-			::KillTimer(hWnd, FASTCOPY_TIMER);
-			isDelay = FALSE;
-			ExecCopyCore();
+		if (isDelay) {
+			ShareInfo::CheckInfo	ci;
+			if (fastCopy.TakeExclusivePriv(forceStart, &ci)) {
+				::KillTimer(hWnd, FASTCOPY_TIMER);
+				isDelay = FALSE;
+				ExecCopyCore();
+			}
+			else {
+				SetDlgItemText(STATUS_EDIT, LoadStr(ci.all_running >= MaxRunNum() ?
+					IDS_WAIT_MANYPROC : IDS_WAIT_ACQUIREDRV));
+			}
 		}
 		else {
-			SetDlgItemText(STATUS_EDIT, LoadStr(ci.all_running >= MaxRunNum() ?
-				IDS_WAIT_MANYPROC : IDS_WAIT_ACQUIREDRV));
+			if (timerCnt & 0x1) {
+				UpdateSpeedLevel(TRUE); // check 500msec
+			}
+
+			if (timerCnt == 1 || ((timerCnt >> cfg.infoSpan) << cfg.infoSpan) == timerCnt) {
+				SetInfo();
+			}
 		}
 	}
+	else if (timerID == FASTCOPY_PAINT_TIMER) {
+		KillTimer(timerID);
+		InvalidateRect(NULL, TRUE);
+		Debug("InvalidateRect timer\n");
+	}
 	else {
-		if (timerCnt & 0x1) {
-			UpdateSpeedLevel(TRUE); // check 500msec
-		}
-
-		if (timerCnt == 1 || ((timerCnt >> cfg.infoSpan) << cfg.infoSpan) == timerCnt) {
-			SetInfo();
-		}
+		Debug("Illegal timer(%d)\n", timerID);
+		KillTimer(timerID);
 	}
 
 	return	TRUE;
@@ -3407,7 +3436,6 @@ void TMainDlg::SetJob(int idx)
 
 	SetDlgItemTextW(JOBTITLE_STATIC, job->title);
 	SendDlgItemMessage(MODE_COMBO, CB_SETCURSEL, idx, 0);
-	// SetDlgItemInt(BUFSIZE_EDIT, job->bufSize);
 	CheckDlgButton(ESTIMATE_CHECK, job->estimateMode);
 	CheckDlgButton(VERIFY_CHECK, job->enableVerify);
 	CheckDlgButton(IGNORE_CHECK, job->ignoreErr);

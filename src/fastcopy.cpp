@@ -1,9 +1,9 @@
 ﻿static char *fastcopy_id = 
-	"@(#)Copyright (C) 2004-2017 H.Shirouzu		fastcopy.cpp	ver3.31";
+	"@(#)Copyright (C) 2004-2018 H.Shirouzu		fastcopy.cpp	ver3.41";
 /* ========================================================================
 	Project  Name			: Fast Copy file and directory
 	Create					: 2004-09-15(Wed)
-	Update					: 2017-07-30(Sun)
+	Update					: 2018-01-27(Sat)
 	Copyright				: H.Shirouzu
 	License					: GNU General Public License version 3
 	======================================================================== */
@@ -59,6 +59,12 @@ FastCopy::FastCopy()
 	shareInfo.Init(&driveMng);
 	driveMng.SetShareInfo(&shareInfo);
 
+//	for (char c = 'C'; c <= 'Z'; c++) {
+//		WCHAR	root[MAX_PATH] = L"C:\\";
+//		root[0] = c;
+//		driveMng.SetDriveID(root);
+//	}
+
 	src = new WCHAR [MAX_WPATH + MAX_PATH];
 	dst = new WCHAR [MAX_WPATH + MAX_PATH];
 	confirmDst = new WCHAR [MAX_WPATH + MAX_PATH];
@@ -79,6 +85,7 @@ FastCopy::FastCopy()
 	hardLinkDst = NULL;
 	findInfoLv = IsWin7() ? FindExInfoBasic : FindExInfoStandard;
 	findFlags  = IsWin7() ? FIND_FIRST_EX_LARGE_FETCH : 0;
+	frdFlags = FMF_EMPTY_RETRY;
 
 	errBuf.AllocBuf(MIN_ERR_BUF, MAX_ERR_BUF);
 }
@@ -558,6 +565,7 @@ BOOL FastCopy::RegisterInfo(const PathArray *_srcArray, const PathArray *_dstArr
 	timeDiffGrace = info.timeDiffGrace; // InitSrcPath で最終値に更新
 
 	findFlags = (IsWin7() && !(info.flags & NO_LARGE_FETCH)) ? FIND_FIRST_EX_LARGE_FETCH : 0;
+	frdFlags = FMF_EMPTY_RETRY;
 
 	isListingOnly = (info.flags & LISTING_ONLY) ? TRUE : FALSE;
 	isListing = (info.flags & LISTING) || isListingOnly ? TRUE : FALSE;
@@ -570,11 +578,6 @@ BOOL FastCopy::RegisterInfo(const PathArray *_srcArray, const PathArray *_dstArr
 	src_root[0] = 0;
 
 	// 最大転送サイズ上限（InitSrcPath で再設定）
-	if (info.maxOvlSize <= 0) {
-		info.maxOvlSize = (info.maxTransSize / info.maxOvlNum) + MIN_BUF - 1;
-		info.maxOvlSize = info.maxOvlSize / MIN_BUF * MIN_BUF;
-	}
-	info.maxTransSize = info.maxOvlSize;
 	maxReadSize = maxWriteSize = maxDigestReadSize = (DWORD)info.maxOvlSize;
 
 	// reg filter
@@ -654,8 +657,9 @@ BOOL FastCopy::AllocBuf(void)
 		errBuf.AllocBuf(MIN_ERR_BUF, MAX_ERR_BUF);
 	}
 
+	size_t	maxTransSize = info.maxOvlSize * info.maxOvlNum;
 	ssize_t	allocSize = ssize_t(isListingOnly ?
-		MAX_LIST_BUF : info.bufSize + (PAGE_SIZE * (4 + (info.bufSize / info.maxTransSize))));
+		MAX_LIST_BUF : info.bufSize + (PAGE_SIZE * (4 + (info.bufSize / maxTransSize))));
 	BOOL	need_mainbuf = info.mode != DELETE_MODE ||
 					((info.flags & (OVERWRITE_DELETE|OVERWRITE_DELETE_NSA)) && !isListingOnly);
 
@@ -1752,8 +1756,11 @@ void FastCopy::FlushMoveListCore(MoveObj *data)
 			::SetFileAttributesW(data->path, FILE_ATTRIBUTE_DIRECTORY);
 			// ResetAcl()
 		}
-		if (isExec && ForceRemoveDirectoryW(data->path, info.aclReset) == FALSE) {
+		if (isExec && ForceRemoveDirectoryW(data->path, info.aclReset|frdFlags) == FALSE) {
 			curTotal->dErrDirs++;
+			if (frdFlags && ::GetLastError() == ERROR_DIR_NOT_EMPTY) {
+				frdFlags = 0;
+			}
 			ConfirmErr(L"RemoveDirectory(move)", data->path + prefix_len);
 		} else {
 			curTotal->deleteDirs++;
@@ -3104,6 +3111,7 @@ BOOL FastCopy::DeleteDirProc(WCHAR *path, int dir_len, WCHAR *fname, FileStat *s
 		ret = DeleteProc(path, new_dir_len, fr);
 		if (isAbort) goto END;
 	}
+
 	if ((fr == FR_CONT) || cur_skips != curTotal->filterDelSkips
 		|| (filterMode && info.mode == DELETE_MODE && 
 			(info.flags & DELDIR_WITH_FILTER) == 0 && (filterMode & FilterBits(FILE_REG, INC_REG)
@@ -3120,8 +3128,11 @@ BOOL FastCopy::DeleteDirProc(WCHAR *path, int dir_len, WCHAR *fname, FileStat *s
 				target = confirmDst;
 			}
 		}
-		if ((ret = ForceRemoveDirectoryW(target, info.aclReset)) == FALSE) {
+		if ((ret = ForceRemoveDirectoryW(target, info.aclReset|frdFlags)) == FALSE) {
 			curTotal->dErrDirs++;
+			if (frdFlags && ::GetLastError() == ERROR_DIR_NOT_EMPTY) {
+				frdFlags = 0;
+			}
 			ConfirmErr(L"RemoveDirectory", target + dstPrefixLen);
 			goto END;
 		}
@@ -3261,11 +3272,12 @@ void FastCopy::SetupRandomDataBuf(void)
 	data->base_size = max(PAGE_SIZE, dstSectorSize);
 	data->buf_size = int(mainBuf.Size() - data->base_size);
 	data->buf[0] = mainBuf.Buf() + data->base_size;
+	size_t	maxTransSize = info.maxOvlSize * info.maxOvlNum;
 
 	if (data->is_nsa) {
 		data->buf_size /= 3;
 		data->buf_size = (data->buf_size / data->base_size) * data->base_size;
-		data->buf_size = min((DWORD)info.maxTransSize, data->buf_size);
+		data->buf_size = min((DWORD)maxTransSize, data->buf_size);
 
 		data->buf[1] = data->buf[0] + data->buf_size;
 		data->buf[2] = data->buf[1] + data->buf_size;
@@ -3280,7 +3292,7 @@ void FastCopy::SetupRandomDataBuf(void)
 		memset(data->buf[2], 0, data->buf_size);
 	}
 	else {
-		data->buf_size = min((DWORD)info.maxTransSize, data->buf_size);
+		data->buf_size = min((DWORD)maxTransSize, data->buf_size);
 		if (info.flags & OVERWRITE_PARANOIA) {
 			TGenRandom(data->buf[0], data->buf_size);	// CryptAPIのrandは遅い...
 		}
