@@ -245,7 +245,7 @@ public:
 	char	driveMap[64];
 	WCHAR	statusFont[LF_FACESIZE];
 	int		statusFontSize;
-	DynBuf	officialPub;	// for update from ipmsg.org
+	DynBuf	officialPub;
 
 	BOOL	needIniConvert;
 

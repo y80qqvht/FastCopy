@@ -297,6 +297,9 @@ struct TRect : public RECT {
 		right  = x + cx;
 		bottom = y + cy;
 	}
+	void	InitDefault() {
+		Init(CW_USEDEFAULT, CW_USEDEFAULT, 0, 0);
+	}
 	long&	x() { return left; }
 	long&	y() { return top; }
 	long	cx() const { return right - left; }
@@ -423,6 +426,7 @@ class TWin : public THashObj {
 protected:
 	TRect			rect;
 	TRect			orgRect;
+	TRect			pRect; // parent
 	HACCEL			hAccel;
 	TWin			*parent;
 	BOOL			sleepBusy;	// for TWin::Sleep() only
@@ -546,6 +550,7 @@ public:
 	virtual int		GetWindowTextLengthU8(void);
 	virtual BOOL	InvalidateRect(const RECT *rc, BOOL fErase);
 	virtual HWND	SetFocus();
+	virtual BOOL	RestoreRectFromParent();
 
 	virtual LONG_PTR SetWindowLong(int index, LONG_PTR val);
 	virtual LONG_PTR GetWindowLong(int index);
@@ -1066,7 +1071,11 @@ public:
 #include "tapi32u8.h"
 #include "tinet.h"
 #include "ipdict.h"
+#include "scopeexit.h"
+#include "tcmndlg.h"
 
 void TGsFailureHack();
+void TLibInit();
 
 #endif
+

@@ -1,9 +1,9 @@
 ﻿static char *cfg_id = 
-	"@(#)Copyright (C) 2004-2018 H.Shirouzu		cfg.cpp	ver3.41";
+	"@(#)Copyright (C) 2004-2018 H.Shirouzu		cfg.cpp	ver3.50";
 /* ========================================================================
 	Project  Name			: Fast/Force copy file and directory
 	Create					: 2004-09-15(Wed)
-	Update					: 2018-01-27(Sat)
+	Update					: 2018-05-28(Mon)
 	Copyright				: H.Shirouzu
 	License					: GNU General Public License version 3
 	======================================================================== */
@@ -57,7 +57,8 @@
 #define BUFSIZE_KEY				"bufsize"
 #define MAXRUNNUM_KEY			"max_runnum"
 #define MAXOVLSIZE_KEY			"max_ovlsize"
-#define MAXOVLNUM_KEY			"max_ovlnum"
+#define MAXOVLNUMOLD_KEY		"max_ovlnum"
+#define MAXOVLNUM_KEY			"max_ovlnum2"
 #define MAXOPENFILES_KEY		"max_openfiles"
 #define MAXATTRSIZEOLD_KEY		"max_attrsize"
 #define MAXATTRSIZE_KEY			"max_attrsize2"
@@ -142,7 +143,8 @@
 #define DEFAULT_EMPTYDIR		1
 #define DEFAULT_FORCESTART		0
 #define DEFAULT_MAXRUNNUM		3
-#define DEFAULT_MAXOVLNUM		4
+#define DEFAULT_MAXOVLNUM_OLD	4
+#define DEFAULT_MAXOVLNUM		20
 #define DEFAULT_MAXOVLSIZE		1
 #ifdef _WIN64
 #define DEFAULT_BUFSIZE			256
@@ -222,7 +224,8 @@ BOOL ConvertToX86Dir(WCHAR *target)
 BOOL ConvertVirtualStoreConf(WCHAR *execDir, WCHAR *userDir, WCHAR *virtualDir)
 {
 	WCHAR	buf[MAX_PATH];
-	WCHAR	org_ini[MAX_PATH], usr_ini[MAX_PATH], vs_ini[MAX_PATH];
+	WCHAR	org_ini[MAX_PATH];
+	WCHAR	usr_ini[MAX_PATH];
 	BOOL	is_admin = ::IsUserAnAdmin();
 	BOOL	is_exists;
 
@@ -239,6 +242,7 @@ BOOL ConvertVirtualStoreConf(WCHAR *execDir, WCHAR *userDir, WCHAR *virtualDir)
 	}
 
 	if (virtualDir && virtualDir[0]) {
+		WCHAR	vs_ini[MAX_PATH];
 		MakePathW(vs_ini,  virtualDir, FASTCOPY_INI);
 		if (::GetFileAttributesW(vs_ini) != 0xffffffff) {
 			if (!is_exists) {
@@ -256,7 +260,7 @@ BOOL ConvertVirtualStoreConf(WCHAR *execDir, WCHAR *userDir, WCHAR *virtualDir)
 
 	if ((is_admin || !is_exists) && ::GetFileAttributesW(org_ini) != 0xffffffff) {
 		if (!is_exists) {
-			is_exists = ::CopyFileW(org_ini, usr_ini, TRUE);
+			::CopyFileW(org_ini, usr_ini, TRUE);
 		}
 		if (is_admin) {
 			swprintf(buf, L"%s.obsolete", org_ini);
@@ -418,7 +422,7 @@ void ConvertFilter(const WCHAR *s, WCHAR *d)
 	}
 	d[di] = 0;
 
-	DebugW(L"%s -> %s\n", s, d);
+	DBGW(L"%s -> %s\n", s, d);
 }
 
 BOOL Cfg::GetFilterStr(const char *key, char *tmpbuf, WCHAR *wbuf)
@@ -500,7 +504,15 @@ BOOL Cfg::ReadIni(WCHAR *user_dir, WCHAR *virtual_dir)
 	bufSize			= ini.GetInt(BUFSIZE_KEY, DEFAULT_BUFSIZE);
 	maxRunNum		= ini.GetInt(MAXRUNNUM_KEY, DEFAULT_MAXRUNNUM);
 
-	maxOvlNum		= ini.GetInt(MAXOVLNUM_KEY, DEFAULT_MAXOVLNUM);
+
+	maxOvlNum		= ini.GetInt(MAXOVLNUM_KEY, 0);
+	if (maxOvlNum == 0) {
+		maxOvlNum = ini.GetInt(MAXOVLNUMOLD_KEY, DEFAULT_MAXOVLNUM_OLD);
+		if (maxOvlNum == DEFAULT_MAXOVLNUM_OLD) {
+			maxOvlNum = DEFAULT_MAXOVLNUM;
+		}
+	}
+
 	maxOvlSize		= ini.GetInt(MAXOVLSIZE_KEY, DEFAULT_MAXOVLSIZE);
 	maxOvlSize		= min(max(maxOvlSize, 1), 4095);
 

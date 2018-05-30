@@ -1,5 +1,5 @@
 ﻿======================================================================
-                     FastCopy  ver3.41                 2018/01/27
+                     FastCopy  ver3.50                 2018/05/29
                                             H.Shirouzu（白水啓章）
 ======================================================================
 
@@ -40,12 +40,12 @@
 	 場合は別途、お問い合わせください）
 	 詳しくは同梱の license.txt をご覧ください。
 
-	xxHash library Copyright (C) 2012-2014 Mr.Yann Collet, All rights reserved.
+	xxHash library Copyright (C) 2012-2016 Mr.Yann Collet, All rights reserved.
 	  more details: external/xxhash/LICENSE
 
 使用法等：
 	ヘルプ(fastcopy.chm) を参照してください。
 
 ソース・ビルドについて：
-	VS2015 以降でビルドできます。
+	VS2017 以降でビルドできます。
 

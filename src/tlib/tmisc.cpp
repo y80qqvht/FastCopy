@@ -38,6 +38,8 @@ static BOOL gCsInit = []() {
 Condition::Event	*Condition::gEvents  = NULL;
 volatile LONG		Condition::gEventMap = 0;
 
+static LCID defaultLCID;
+
 #pragma comment (lib, "Dbghelp.lib")
 #pragma comment (lib, "Netapi32.lib")
 
@@ -212,7 +214,7 @@ void Condition::Notify(void)	// 現状では、眠っているスレッド全員
 //		cv[i].UnLock();
 //	}
 //
-//	Debug(Fmt("%d\n", GetTickCount() - tick));
+//	DBG(Fmt("%d\n", GetTickCount() - tick));
 //}
 
 
@@ -222,48 +224,50 @@ void Condition::Notify(void)	// 現状では、眠っているスレッド全員
   説  明 ： 
   注  意 ： 
 =========================================================================*/
-VBuf::VBuf(size_t _size, size_t _max_size, VBuf *_borrowBuf)
+VBuf::VBuf(size_t _size, size_t _max_size)
 {
+	dumpExcept = FALSE;
 	Init();
 
-	if (_size || _max_size) AllocBuf(_size, _max_size, _borrowBuf);
+	if (_size || _max_size) {
+		AllocBuf(_size, _max_size);
+	}
 }
 
 VBuf::~VBuf()
 {
-	if (buf)
+	if (buf) {
 		FreeBuf();
+	}
 }
 
 void VBuf::Init(void)
 {
 	buf = NULL;
-	borrowBuf = NULL;
-	size = usedSize = maxSize = 0;
+	size = 0;
+	usedSize = 0;
+	maxSize = 0;
 }
 
-BOOL VBuf::AllocBuf(size_t _size, size_t _max_size, VBuf *_borrowBuf)
+BOOL VBuf::AllocBuf(size_t _size, size_t _max_size)
 {
 	if (buf) FreeBuf();
 
-	if (_max_size == 0)
+	if (_max_size == 0) {
 		_max_size = _size;
+	}
 	maxSize = _max_size;
-	borrowBuf = _borrowBuf;
 
-	if (borrowBuf) {
-		if (!borrowBuf->Buf() || borrowBuf->MaxSize() < borrowBuf->UsedSize() + maxSize)
-			return	FALSE;
-		buf = borrowBuf->UsedEnd();
-		borrowBuf->AddUsedSize(maxSize + PAGE_SIZE);
+// 1page 分だけ余計に確保（buffer over flow 検出用）
+	if (!(buf = (BYTE *)::VirtualAlloc(NULL, maxSize + PAGE_SIZE, MEM_RESERVE, PAGE_READWRITE))) {
+		Init();
+		return	FALSE;
 	}
-	else {
-	// 1page 分だけ余計に確保（buffer over flow 検出用）
-		if (!(buf = (BYTE *)::VirtualAlloc(NULL, maxSize + PAGE_SIZE, MEM_RESERVE, PAGE_READWRITE))) {
-			Init();
-			return	FALSE;
-		}
+
+	if (dumpExcept) {
+		RegisterDumpExceptArea(buf, maxSize + PAGE_SIZE);
 	}
+
 	return	Grow(_size);
 }
 
@@ -275,11 +279,9 @@ BOOL VBuf::LockBuf(void)
 void VBuf::FreeBuf(void)
 {
 	if (buf) {
-		if (borrowBuf) {
-			::VirtualFree(buf, maxSize + PAGE_SIZE, MEM_DECOMMIT);
-		}
-		else {
-			::VirtualFree(buf, 0, MEM_RELEASE);
+		::VirtualFree(buf, 0, MEM_RELEASE);
+		if (dumpExcept && size) {
+			RemoveDumpExceptArea(buf);
 		}
 	}
 	Init();
@@ -294,10 +296,12 @@ BOOL VBuf::Grow(size_t grow_size)
 		return	FALSE;
 
 	size += grow_size;
+
 	return	TRUE;
 }
 
 
+// LoadStr
 void InitInstanceForLoadStr(HINSTANCE hI)
 {
 	defaultStrInstance = hI;
@@ -305,16 +309,17 @@ void InitInstanceForLoadStr(HINSTANCE hI)
 
 LPSTR LoadStrA(UINT resId, HINSTANCE hI)
 {
-#ifdef _WIN64
-	static TResHash	*hash = new TResHash(1000);
-#else
 	static TResHash	*hash;
-	if (!hash) {	// avoid XP shell extension problem
-					// (an exception occurs in XP Shell when initializing
-					//  static variable in a function by new allocator or any function)
-		hash = new TResHash(1000);
+	static LCID lastLCID;
+
+	if (lastLCID != defaultLCID || !hash) {
+		if (hash) {
+			hash->Reset();
+		} else {
+			hash = new TResHash(1000);
+		}
+		lastLCID = defaultLCID;
 	}
-#endif
 
 	TResHashObj	*obj;
 
@@ -330,19 +335,22 @@ LPSTR LoadStrA(UINT resId, HINSTANCE hI)
 
 LPWSTR LoadStrW(UINT resId, HINSTANCE hI)
 {
-#ifdef _WIN64
-	static TResHash	*hash = new TResHash(1000);
-#else
 	static TResHash	*hash;
-	if (!hash) {	// avoid XP shell extension problem
-		hash = new TResHash(1000);
-	}
-#endif
+	static LCID lastLCID;
 
-	WCHAR		buf[1024];
+	if (lastLCID != defaultLCID || !hash) {
+		if (hash) {
+			hash->Reset();
+		} else {
+			hash = new TResHash(1000);
+		}
+		lastLCID = defaultLCID;
+	}
+
 	TResHashObj	*obj;
 
 	if ((obj = hash->Search(resId)) == NULL) {
+		WCHAR	buf[1024];
 		if (::LoadStringW(hI ? hI : defaultStrInstance, resId, buf,
 				sizeof(buf) / sizeof(WCHAR)) >= 0) {
 			obj = new TResHashObj(resId, wcsdup(buf));
@@ -352,7 +360,33 @@ LPWSTR LoadStrW(UINT resId, HINSTANCE hI)
 	return	obj ? (LPWSTR)obj->val : NULL;
 }
 
-static LCID defaultLCID;
+LPSTR LoadStrU8(UINT resId, HINSTANCE hI)
+{
+	static TResHash	*hash;
+	static LCID lastLCID;
+
+	if (lastLCID != defaultLCID || !hash) {
+		if (hash) {
+			hash->Reset();
+		} else {
+			hash = new TResHash(1000);
+		}
+		lastLCID = defaultLCID;
+	}
+
+	TResHashObj	*obj;
+
+	if ((obj = hash->Search(resId)) == NULL) {
+		WCHAR	buf[1024];
+		if (::LoadStringW(hI ? hI : defaultStrInstance, resId, buf, sizeof(buf) / sizeof(WCHAR))
+				>= 0) {
+			U8str	buf_u8(buf);
+			obj = new TResHashObj(resId, strdup(buf_u8.s()));
+			hash->Register(obj);
+		}
+	}
+	return	obj ? (char *)obj->val : NULL;
+}
 
 void TSetDefaultLCID(LCID lcid)
 {
@@ -769,7 +803,7 @@ int snprintfz(char *buf, int size, const char *fmt,...)
 int vsnprintfz(char *buf, int size, const char *fmt, va_list ap)
 {
 	if (!buf) {
-		return	(int)vsnprintf(buf, size, fmt, ap);
+		return	(int)vsnprintf(NULL, size, fmt, ap);
 	}
 
 	if (size <= 0) return 0;
@@ -799,7 +833,7 @@ int snwprintfz(WCHAR *buf, int wsize, const WCHAR *fmt,...)
 int vsnwprintfz(WCHAR *buf, int wsize, const WCHAR *fmt, va_list ap)
 {
 	if (!buf) {
-		return	(int)vswprintf(buf, wsize, fmt, ap);
+		return	(int)vswprintf(NULL, wsize, fmt, ap);
 	}
 	if (wsize <= 0) return 0;
 
@@ -1221,7 +1255,6 @@ BOOL ShellLinkW(const WCHAR *target, const WCHAR *link, const WCHAR *arg, const 
 	IShellLinkW		*shellLink;
 	IPersistFile	*persistFile;
 	BOOL			ret = FALSE;
-	WCHAR			buf[MAX_PATH];
 
 	if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLinkW,
 			(void **)&shellLink))) {
@@ -1232,6 +1265,7 @@ BOOL ShellLinkW(const WCHAR *target, const WCHAR *link, const WCHAR *arg, const 
 		if (desc) {
 			shellLink->SetDescription(desc);
 		}
+		WCHAR	buf[MAX_PATH];
 		GetParentDirW(target, buf);
 		shellLink->SetWorkingDirectory(buf);
 
@@ -1328,9 +1362,8 @@ HRESULT UpdateLinkW(const WCHAR *link, const WCHAR *arg, const WCHAR *desc, DWOR
 {
 	IPersistFile	*persistFile;
 	IShellLinkW		*shellLink;
-	HRESULT			hr = S_OK;
 
-	hr = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLinkW,
+	HRESULT hr = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLinkW,
 		(void **)&shellLink);
 	if (hr == S_OK) {
 		// 事前に IPersistFile::Loadしないと、Distribute Link Tracking されない
@@ -1428,6 +1461,55 @@ BOOL GetParentDirU8(const char *org_path, char *target_dir)
 
 	strncpyz(target_dir, path, MAX_PATH_U8);
 	return	TRUE;
+}
+
+
+BOOL MakeDirU8(char *dir)
+{
+	if (GetFileAttributesU8(dir) != 0xffffffff) {
+		return	TRUE;
+	}
+	return	CreateDirectoryU8(dir, 0);
+}
+
+BOOL MakeDirW(WCHAR *dir)
+{
+	if (::GetFileAttributesW(dir) != 0xffffffff) {
+		return	TRUE;
+	}
+	return	::CreateDirectoryW(dir, 0);
+}
+
+BOOL MakeDirAllU8(char *dir)
+{
+	if (MakeDirU8(dir)) {
+		return	TRUE;
+	}
+
+	char	parent[MAX_PATH_U8];
+	if (!GetParentDirU8(dir, parent) || stricmp(dir, parent) == 0 || *parent == 0) {
+		return	FALSE;
+	}
+	if (!MakeDirAllU8(parent)) {
+		return	FALSE;
+	}
+	return	MakeDirU8(dir);
+}
+
+BOOL MakeDirAllW(WCHAR *dir)
+{
+	if (MakeDirW(dir)) {
+		return	TRUE;
+	}
+
+	WCHAR	parent[MAX_PATH];
+	if (!GetParentDirW(dir, parent) || wcsicmp(dir, parent) == 0 || *parent == 0) {
+		return	FALSE;
+	}
+	if (!MakeDirAllW(parent)) {
+		return	FALSE;
+	}
+	return	MakeDirW(dir);
 }
 
 
@@ -1595,14 +1677,14 @@ void *valloc(size_t size)
 	void	*d = VirtualAlloc(0, s, MEM_RESERVE, PAGE_NOACCESS);
 
 	if (!d || !VirtualAlloc(d, s - PAGE_SIZE, MEM_COMMIT, PAGE_READWRITE)) {
-		Debug("valloc error(%x %d %d)\n", d, s, size);
+		DBG("valloc error(%x %d %d)\n", d, s, size);
 		return NULL;
 	}
 
 	((DWORD *)d)[0]  = VALLOC_SIG;
 	((size_t *)d)[1] = size;
 
-	Debug("valloc (%x %d %d)\n", d, s, size);
+	DBG("valloc (%x %d %d)\n", d, s, size);
 
 	return (void *)((u_char *)d + s - PAGE_SIZE - align_size(size, ALLOC_ALIGN));
 }
@@ -1624,7 +1706,7 @@ void *vrealloc(void *d, size_t size)
 
 	if (d) {
 		if ((old_size = valloc_size(d)) == SIZE_MAX) {
-			Debug("non vrealloc (%x %d %d)\n", d, old_size, size);
+			DBG("non vrealloc (%x %d %d)\n", d, old_size, size);
 			return realloc(d, size);
 		}
 		if (size == 0) {
@@ -1648,11 +1730,11 @@ void vfree(void *d)
 	size_t	size = valloc_size(d);
 
 	if (size == SIZE_MAX) {
-		Debug("vfree non vfree (%x)\n", d);
+		DBG("vfree non vfree (%x)\n", d);
 		free(d);
 		return;
 	}
-	Debug(" vfree %x %d %d\n", valloc_base(d), alloc_size(size), size);
+	DBG(" vfree %x %d %d\n", valloc_base(d), alloc_size(size), size);
 
 #ifdef NON_FREE
 	VirtualFree(valloc_base(d), alloc_size(size), MEM_DECOMMIT);
@@ -1725,6 +1807,7 @@ public:
 	virtual HRESULT __stdcall Notify(u_long, NOTIFYITEM *) = 0;
 };
 
+
 class __declspec(uuid("FB852B2C-6BAD-4605-9551-F15F87830935")) ITrayNotify : public IUnknown {
 public:
 	virtual HRESULT __stdcall RegisterCallback(INotificationCB *) = 0;
@@ -1734,13 +1817,58 @@ public:
 class __declspec(uuid("D133CE13-3537-48BA-93A7-AFCD5D2053B4")) ITrayNotify8 : public IUnknown {
 public:
 	virtual HRESULT __stdcall RegisterCallback(INotificationCB *, u_long *) = 0;
-	virtual HRESULT __stdcall UnregisterCallback(u_long *) = 0;
+	virtual HRESULT __stdcall UnregisterCallback(u_long) = 0;
 	virtual HRESULT __stdcall SetPreference(const NOTIFYITEM *) = 0;
 	virtual HRESULT __stdcall EnableAutoTray(BOOL) = 0;
 	virtual HRESULT __stdcall DoAction(BOOL) = 0;
 };
 const CLSID TrayNotifyId = {
 	0x25DEAD04, 0x1EAC, 0x4911, {0x9E, 0x3A, 0xAD, 0x0A, 0x4A, 0xB5, 0x60, 0xFD}
+};
+
+class INotifyCb : public INotificationCB {
+	DWORD	ref = 0;
+
+public:
+	INotifyCb() {
+	}
+	DWORD	pref = 0;
+
+	HRESULT __stdcall QueryInterface(REFIID riid, void **ppv) {
+		if (riid == __uuidof(INotificationCB)) {
+			*ppv = (INotificationCB *)this;
+			AddRef();
+			return	S_OK;
+		}
+		else if (riid == __uuidof(IUnknown)) {
+			*ppv = (IUnknown *)this;
+			AddRef();
+			return	S_OK;
+		}
+		return	E_NOINTERFACE;
+	}
+	ULONG __stdcall AddRef() {
+		DBG("AddRef(%d)\n", ref+1);
+		return ++ref;
+	}
+	ULONG __stdcall Release() {
+		DBG("Release(%d)\n", ref-1);
+		if (--ref == 0) {
+			DBG("delete INotifyCb\n");
+			delete this;
+		}
+		return	ref;
+	}
+	HRESULT __stdcall Notify(ULONG ev, NOTIFYITEM *ni) {
+		DBGW(L"ev=%d pref=%d id=%d path=%s tip=%s\n", ev, ni->pref, ni->id, ni->exe, ni->tip);
+		DWORD	procId = 0;
+		::GetWindowThreadProcessId(ni->hWnd, &procId);
+		if (procId == ::GetCurrentProcessId()) {
+			pref = ni->pref;
+			DBG("pref=%d\n", pref);
+		}
+		return S_OK;
+	}
 };
 
 BOOL ForceSetTrayIcon(HWND hWnd, UINT id, DWORD pref)
@@ -1754,8 +1882,9 @@ BOOL ForceSetTrayIcon(HWND hWnd, UINT id, DWORD pref)
 		CoCreateInstance(TrayNotifyId, NULL, CLSCTX_LOCAL_SERVER, __uuidof(ITrayNotify8),
 			(void **)&tn);
 		if (tn) {
-			auto	hr = tn->SetPreference(&ni);
-			if (SUCCEEDED(hr)) ret = TRUE;
+			if (SUCCEEDED(tn->SetPreference(&ni))) {
+				ret = TRUE;
+			}
 			tn->Release();
 		}
 	} else {
@@ -1764,12 +1893,46 @@ BOOL ForceSetTrayIcon(HWND hWnd, UINT id, DWORD pref)
 		CoCreateInstance(TrayNotifyId, NULL, CLSCTX_LOCAL_SERVER, __uuidof(ITrayNotify),
 			(void **)&tn);
 		if (tn) {
-			auto	hr = tn->SetPreference(&ni);
-			if (SUCCEEDED(hr)) ret = TRUE;
+			if (SUCCEEDED(tn->SetPreference(&ni))) {
+				ret = TRUE;
+			}
 			tn->Release();
 		}
 	}
+
 	return	ret;
+}
+
+TrayMode GetTrayIconState()
+{
+	TRegistry	reg(HKEY_CURRENT_USER);
+
+	if (reg.OpenKey("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer")) {
+		int		val = 0;
+		if (reg.GetInt("EnableAutoTray", &val) && val == 0) {
+			return	TIS_ALL;	// always show
+		}
+	}
+	if (!IsWin8()) {
+		return	TIS_SHOW;
+	}
+
+	DWORD		pref = 0;
+	ITrayNotify8 *tn = NULL;
+
+	CoCreateInstance(TrayNotifyId, NULL, CLSCTX_LOCAL_SERVER, __uuidof(ITrayNotify8),
+		(void **)&tn);
+	if (tn) {
+		INotifyCb	*incb = new INotifyCb;
+		u_long		incb_cookie;
+
+		tn->RegisterCallback(incb, &incb_cookie);
+		pref = incb->pref;
+		tn->UnregisterCallback(incb_cookie);
+		tn->Release();
+	}
+
+	return	pref == 2 ? TIS_SHOW : TIS_HIDE;
 }
 
 /* =======================================================================
@@ -1876,7 +2039,7 @@ unsigned __stdcall Is3rdPartyFwEnabledProc(void *_param)
 		param->ret = TRUE;
 	}
 	catch(...) {
-		Debug("INetFwProducts exception\n");
+		DBG("INetFwProducts exception\n");
 	}
 
 END:
@@ -1896,7 +2059,7 @@ BOOL Is3rdPartyFwEnabled(BOOL use_except_list, DWORD timeout, BOOL *is_timeout)
 		if (is_timeout) {
 			*is_timeout = TRUE;
 		}
-		Debug("FW check timeout\n");
+		DBG("FW check timeout\n");
 
 		::TerminateThread(hThread, 0); // 強制終了
 		::CloseHandle(hThread);
@@ -1944,7 +2107,7 @@ BOOL Get3rdPartyFwName(int idx, WCHAR *name, int max_len)
 				wcsncpyz(name, bName, max_len);
 				ret = TRUE;
 				::SysFreeString(bName);
-				//DebugW(L"dispname=<%s>\n", name);
+				DBGW(L"dispname=<%s>\n", name);
 			}
 		}
 		fwProd->Release();
@@ -2303,7 +2466,7 @@ BOOL TGetTextWidth(HDC hDc, const WCHAR *s, int len, int width, int *rlen, int *
 
 //	if (rc.cx() <= width) {
 //		if (rc.cx() != sz.cx) {
-//			DebugW(L" GetTextWidth: %d %d %.*s\n", rc.cx(), sz.cx, *rlen, s);
+//			DBGW(L" GetTextWidth: %d %d %.*s\n", rc.cx(), sz.cx, *rlen, s);
 //		}
 //	}
 	*rcx = rc.cx();
@@ -2417,7 +2580,7 @@ void bo_test()
 	bo_test_core(p);
 }
 
-#if !defined(_DEBUG) &&  _MSC_VER >= 1900 && _MSC_VER <= 1912
+#if !defined(_DEBUG) &&  _MSC_VER >= 1900 && _MSC_VER <= 1914
 #define ENABLE_GS_FAILURE_HACK
 extern "C" __declspec(noreturn) void __cdecl __raise_securityfailure(PEXCEPTION_POINTERS const exception_pointers);
 #endif
@@ -2486,11 +2649,11 @@ HBITMAP TIconToBmp(HICON hIcon, int cx, int cy)
 				((BYTE *)dat)[(i*cx + j) * 4 + 3] = 0xff;
 			}
 //			for (int k=0; k < 4; k++) {
-//				Debug("%02x:", ((BYTE *)dat)[(i*cx + j) * 4 + k]);
+//				DBG("%02x:", ((BYTE *)dat)[(i*cx + j) * 4 + k]);
 //			}
-//			Debug(" ");
+//			DBG(" ");
 		}
-//		Debug("\n");
+//		DBG("\n");
 	}
 
 	::SelectObject(hBmpDc, hBmpSv);
@@ -2559,7 +2722,7 @@ BOOL IsLockedScreen()
 	HWND	hWnd = ::GetForegroundWindow();
 
 	if (!hWnd) {
-		//Debug("NULL\n");
+		DBG("NULL\n");
 		return	TRUE;
 	}
 
@@ -2567,13 +2730,13 @@ BOOL IsLockedScreen()
 	if (itr != hmap.end()) {
 		hlist.erase(itr->second.second);
 		itr->second.second = hlist.insert(hlist.end(), hWnd);
-		//Debug("cached %p %d\n", hWnd, itr->second.first);
+		DBG("cached %p %d\n", hWnd, itr->second.first);
 		return	itr->second.first;
 	}
 
 	while (hlist.size() > 10) {
 		auto	itr = hlist.begin();
-		//Debug("erase cache %p %d\n", *itr, hmap[*itr].first);
+		DBG("erase cache %p %d\n", *itr, hmap[*itr].first);
 		hmap.erase(*itr);
 		hlist.erase(itr);
 	}
@@ -2596,9 +2759,9 @@ BOOL IsLockedScreen()
 #define LOCKAPP_LEN		12
 				if (len > LOCKAPP_LEN && wcsicmp(wbuf+len-LOCKAPP_LEN, LOCKAPP_NAME) == 0) {
 					ret = TRUE;
-					//Debug("Lock Detect %p\n", hWnd);
+					DBG("Lock Detect %p\n", hWnd);
 				}
-				//else DebugW(L"Non Lock Detect(%s) %p\n", wbuf, hWnd);
+				//else DBGW(L"Non Lock Detect(%s) %p\n", wbuf, hWnd);
 				::CloseHandle(hProc);
 			}
 		}
@@ -2737,4 +2900,40 @@ time_t SYSTEMTIME_to_time(const SYSTEMTIME &st, BOOL is_local)
 	return	FileTime2UnixTime(&ft);
 }
 
+BOOL TGetIntegrityLevel(DWORD *ilv)
+{
+	HANDLE hToken = NULL;
 
+	if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_QUERY, &hToken)) return FALSE;
+	scope_defer([&]() { if (hToken) ::CloseHandle(hToken); });
+
+	DWORD	len = 0;
+	::GetTokenInformation(hToken, TokenIntegrityLevel, NULL, 0, &len);
+	if (len == 0) return FALSE;
+
+	auto tml = scope_raii((PTOKEN_MANDATORY_LABEL)malloc(len), [](auto tml) { free(tml); });
+	if (!tml) return FALSE;
+
+	if (!GetTokenInformation(hToken, TokenIntegrityLevel, tml, len, &len)) return FALSE;
+
+	*ilv = *GetSidSubAuthority(tml->Label.Sid,
+			(DWORD)(UCHAR)(*GetSidSubAuthorityCount(tml->Label.Sid) - 1));
+
+	return	TRUE;
+}
+
+BOOL TIsLowIntegrity()
+{
+	DWORD	ilv = SECURITY_MANDATORY_LOW_RID;
+
+	if (!TGetIntegrityLevel(&ilv)) {
+		return	FALSE;
+	}
+
+	// SECURITY_MANDATORY_LOW_RID
+	// SECURITY_MANDATORY_MEDIUM_RID
+	// SECURITY_MANDATORY_HIGH_RID
+	// SECURITY_MANDATORY_SYSTEM_RID
+
+	return	ilv == SECURITY_MANDATORY_LOW_RID;
+}

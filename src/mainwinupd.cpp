@@ -18,7 +18,7 @@ static BOOL IsSilent = FALSE;
 void TMainDlg::UpdateCheck(BOOL is_silent)
 {
 	IsSilent = is_silent;
-	TInetAsync(IPMSG_SITE, FASTCOPY_UPDATEINFO, hWnd, WM_FASTCOPY_UPDINFORES);
+	TInetAsync(FASTCOPY_SITE, FASTCOPY_UPDATEINFO, hWnd, WM_FASTCOPY_UPDINFORES);
 }
 
 void TMainDlg::UpdateCheckRes(TInetReqReply *_irr)
@@ -27,7 +27,8 @@ void TMainDlg::UpdateCheckRes(TInetReqReply *_irr)
 
 	if (irr->reply.UsedSize() == 0 || irr->code != HTTP_STATUS_OK) {
 		if (!IsSilent) {
-			SetDlgItemText(STATUS_EDIT, Fmt("Can't access(%d) https://%s", irr->code, IPMSG_SITE));
+			SetDlgItemText(STATUS_EDIT,
+				Fmt("Can't access(%d) https://%s", irr->code, FASTCOPY_SITE));
 		}
 		return;
 	}
@@ -112,7 +113,7 @@ void TMainDlg::UpdateCheckRes(TInetReqReply *_irr)
 
 	if (MessageBox(Fmt(LoadStr(IDS_UPDFMT_UPDMSG), updData.ver.s()), FASTCOPY,
 		MB_OKCANCEL) == IDOK) {
-		TInetAsync("ipmsg.org", updData.path.s(), hWnd, WM_FASTCOPY_UPDDLRES);
+		TInetAsync(FASTCOPY_SITE, updData.path.s(), hWnd, WM_FASTCOPY_UPDDLRES);
 	}
 }
 
@@ -121,7 +122,6 @@ void TMainDlg::UpdateDlRes(TInetReqReply *_irr)
 	shared_ptr<TInetReqReply>	irr(_irr);
 	BYTE	hash[SHA256_SIZE] = {};
 	TDigest	d;
-	BOOL	ret = FALSE;
 
 	if (irr->reply.UsedSize() <= 0) {
 		SetDlgItemText(STATUS_EDIT, Fmt("Update download err %zd", irr->reply.UsedSize()));

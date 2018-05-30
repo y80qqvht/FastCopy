@@ -1,10 +1,14 @@
 ﻿static char *version_id = 
-	"@(#)Copyright (C) 2004-2018 H.Shirouzu	Version.cpp ver3.41";
+	"@(#)Copyright (C) 2004-2018 H.Shirouzu	Version.cpp ver3.50"
+#ifdef _DEBUG
+	"d"
+#endif
+;
 /* ========================================================================
 	Project  Name			: Fast/Force copy file and directory
 	Module Name				: Version
 	Create					: 2010-06-13(Sun)
-	Update					: 2018-01-27(Sat)
+	Update					: 2018-05-28(Mon)
 	Copyright				: H.Shirouzu
 	License					: GNU General Public License version 3
 	======================================================================== */
@@ -66,7 +70,7 @@ const char *GetCopyrightStr(void)
 const char *GetLibCopyrightStr(void)
 {
 	if (libcopyright_str[0] == 0) {
-		strcpy(libcopyright_str, "xxHash Library:\r\nCopyright (c) 2012-2014, Yann Collet");
+		strcpy(libcopyright_str, "xxHash Library:\r\nCopyright (c) 2012-2016, Yann Collet");
 	}
 	return	libcopyright_str;
 }

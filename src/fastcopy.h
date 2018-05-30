@@ -1,9 +1,9 @@
 ﻿/* static char *fastcopy_id = 
-	"@(#)Copyright (C) 2004-2018 H.Shirouzu		fastcopy.h	Ver3.41"; */
+	"@(#)Copyright (C) 2004-2018 H.Shirouzu		fastcopy.h	Ver3.50"; */
 /* ========================================================================
 	Project  Name			: Fast Copy file and directory
 	Create					: 2004-09-15(Wed)
-	Update					: 2018-01-27(Sat)
+	Update					: 2018-05-28(Mon)
 	Copyright				: H.Shirouzu
 	License					: GNU General Public License version 3
 	======================================================================== */
@@ -22,10 +22,11 @@
 #define MIN_SECTOR_SIZE		(512)
 #define BIG_SECTOR_SIZE		(4096)
 #define MAX_BUF				(1024 * 1024 * 1024)
-#define MIN_BUF				(1024 * 1024)
-#define BIGTRANS_ALIGN		(1024 * 1024)
+#define MINREMAIN_BUF		(1024 * 1024)
+#define MIN_BUF				(256 * 1024)
+#define BIGTRANS_ALIGN		(256 * 1024)
 #define APP_MEMSIZE			(6 * 1024 * 1024)
-#define NETDIRECT_SIZE		(64 * 1024 * 1024)
+//#define NETDIRECT_SIZE	(64 * 1024 * 1024)
 #define PATH_LOCAL_PREFIX	L"\\\\?\\"
 #define PATH_UNC_PREFIX		L"\\\\?\\UNC"
 #define PATH_LOCAL_PREFIX_LEN	4
@@ -132,7 +133,7 @@ struct TotalTrans {
 	int		wErrAclStream;
 
 	int		openRetry;
-	BOOL	abortCnt;
+	int		abortCnt;
 };
 
 struct TransInfo {
@@ -338,7 +339,21 @@ public:
 		size_t	bufSize;		// (I/ )
 		int		maxOpenFiles;	// (I/ )
 		size_t	maxOvlSize;		// (I/ )
+		BOOL	IsNormalOvl(int64 fsize) { return fsize >= maxOvlSize * min(maxOvlNum, 20); }
+		BOOL	IsMinOvl(int64 fsize) { return fsize >= MIN_BUF * 2; }
 		DWORD	maxOvlNum;		// (I/ )
+		DWORD	GenOvlSize(int64 fsize) {
+			int64 size = fsize / min(maxOvlNum, 20);
+			if (size > MIN_BUF) {
+				auto i = get_nlz64(size);
+				DWORD unit = 1 << i;
+				if (unit > maxOvlSize) {
+					unit = (DWORD)maxOvlSize;
+				}
+				return	unit;
+			}
+			return MIN_BUF;
+		}
 		size_t	maxAttrSize;	// (I/ )
 		size_t	maxDirSize;		// (I/ )
 		size_t	maxMoveSize;	// (I/ )
@@ -795,8 +810,8 @@ protected:
 	BOOL WriteFileBackupProc(HANDLE fh, int dst_len);
 	BOOL ChangeToWriteModeCore(BOOL is_finish=FALSE);
 	BOOL ChangeToWriteMode(BOOL is_finish=FALSE);
-	ReqHead *AllocReqBuf(int req_size, int64 _data_size);
-	ReqHead *PrepareReqBuf(int req_size, int64 data_size, int64 file_id);
+	ReqHead *AllocReqBuf(int req_size, int64 _data_size, int64 fsize);
+	ReqHead *PrepareReqBuf(int req_size, int64 data_size, int64 file_id, int64 fsize=0);
 	BOOL CancelReqBuf(ReqHead *req);
 	BOOL SendRequest(Command cmd, ReqHead *buf=NULL, FileStat *stat=NULL);
 	BOOL SendRequestCore(Command cmd, ReqHead *buf, FileStat *stat);

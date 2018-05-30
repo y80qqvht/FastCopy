@@ -450,7 +450,7 @@ BOOL TMainDlg::CommandLineExecW(int argc, WCHAR **argv)
 			Show(SW_MINIMIZE);
 		}
 		else {
-			TaskTray(NIM_ADD, hMainIcon[FCNORMAL_ICON_IDX], FASTCOPY);
+			TaskTray(NIM_ADD, FCNORM_ICON_IDX, FASTCOPY);
 		}
 	}
 

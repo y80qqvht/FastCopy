@@ -1,15 +1,18 @@
 ﻿static char *miscdlg_id = 
-	"@(#)Copyright (C) 2005-2018 H.Shirouzu		miscdlg.cpp	ver3.41";
+	"@(#)Copyright (C) 2005-2018 H.Shirouzu		miscdlg.cpp	ver3.50";
 /* ========================================================================
 	Project  Name			: Fast/Force copy file and directory
 	Create					: 2005-01-23(Sun)
-	Update					: 2018-01-25(Thu)
+	Update					: 2018-05-28(Mon)
 	Copyright				: H.Shirouzu
 	License					: GNU General Public License version 3
 	======================================================================== */
 
 #include "mainwin.h"
 #include <stdio.h>
+#include <vector>
+
+using namespace std;
 
 #include "shellext/shelldef.h"
 
@@ -46,7 +49,7 @@ BOOL TAboutDlg::EvCreate(LPARAM lParam)
 			xsize, ysize, FALSE);
 	}
 	else
-		MoveWindow(rect.left, rect.top, rect.cx(), rect.cy(), FALSE);
+		MoveWindow(rect.x(), rect.y(), rect.cx(), rect.cy(), FALSE);
 
 	return	TRUE;
 }
@@ -85,9 +88,8 @@ BOOL TExecConfirmDlg::EvCreate(LPARAM lParam)
 
 	if (rect.left == CW_USEDEFAULT) {
 		GetWindowRect(&rect);
-		rect.left += 30, rect.right += 30;
-		rect.top += 30, rect.bottom += 30;
-		MoveWindow(rect.left, rect.top, rect.cx(), rect.cy(), FALSE);
+		rect.Slide(30, 30);
+		MoveWindow(rect.x(), rect.y(), rect.cx(), rect.cy(), FALSE);
 	}
 
 	SetDlgItem(SRC_EDIT, XY_FIT);
@@ -165,6 +167,7 @@ BOOL BrowseDirDlgW(TWin *parentWin, UINT editCtl, WCHAR *title, int flg)
 	WCHAR		buf[MAX_PATH_EX] = L"";
 	BOOL		ret = FALSE;
 	PathArray	pathArray;
+	BOOL		with_endsep = (flg & BRDIR_TAILCR) ? TRUE : FALSE;
 
 	parentWin->GetDlgItemTextW(editCtl, fileBuf, MAX_PATH_EX);
 	pathArray.RegisterMultiPath(fileBuf, CRLF);
@@ -177,11 +180,46 @@ BOOL BrowseDirDlgW(TWin *parentWin, UINT editCtl, WCHAR *title, int flg)
 		wcscpy(fileBuf, c_root_v);
 	}
 
+	if (IsWin7()) {
+		GetParentDirW(fileBuf, buf);
+		vector<Wstr>	wvec;
+		Wstr			dir(buf);
+		TFileDlg(parentWin, &wvec, &dir,
+			((flg & BRDIR_FILESELECT) ? FDOPT_DIRFILE : FDOPT_DIR) |
+			((flg & BRDIR_MULTIPATH) ? FDOPT_MULTI : 0),
+			title,
+			(flg & BRDIR_FILESELECT) ? LoadStrW(IDS_SELECT) : NULL);
+
+		if (wvec.size() > 0) {
+			if ((flg & BRDIR_CTRLADD) == 0 ||
+				(::GetKeyState(VK_CONTROL) & 0x8000) == 0) {
+				pathArray.Init();
+			}
+			for (auto &s : wvec) {
+				if ((flg & BRDIR_BACKSLASH)) {
+					DWORD	attr = ::GetFileAttributesW(s.s());
+					if (attr != ~0 && (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+						MakePathW(fileBuf, s.s(), NULW);
+						pathArray.RegisterPath(fileBuf);
+						continue;
+					}
+				}
+				pathArray.RegisterPath(s.s());
+			}
+			pathArray.Sort();
+			DWORD	len = pathArray.GetMultiPathLen(CRLF, NULW, with_endsep);
+			Wstr	w(len);
+			pathArray.GetMultiPath(w.Buf(), len, CRLF, NULW, with_endsep);
+			parentWin->SetDlgItemTextW(editCtl, w.s());
+		}
+		return	TRUE;
+	}
+
 	DirFileMode mode = (flg & BRDIR_INITFILESEL) ? FILESELECT : DIRSELECT;
 
 	TBrowseDirDlgW	dirDlg(title, fileBuf, flg, parentWin);
 	TOpenFileDlg	fileDlg(parentWin, TOpenFileDlg::MULTI_OPEN,
-		OFDLG_DIRSELECT|((flg & BRDIR_TAILCR) ? OFDLG_TAILCR : 0));
+		OFDLG_DIRSELECT|OFDLG_CHDIRREFLECT|(with_endsep ? OFDLG_TAILCR : 0));
 
 	while (mode != SELECT_EXIT) {
 		switch (mode) {
@@ -203,8 +241,8 @@ BOOL BrowseDirDlgW(TWin *parentWin, UINT editCtl, WCHAR *title, int flg)
 						pathArray.Init();
 					}
 					pathArray.RegisterPath(fileBuf);
-					pathArray.GetMultiPath(fileBuf, MAX_PATH_EX, CRLF, NULW,
-						(flg & BRDIR_TAILCR) ? TRUE : FALSE);
+					pathArray.Sort();
+					pathArray.GetMultiPath(fileBuf, MAX_PATH_EX, CRLF, NULW,  with_endsep);
 				}
 				parentWin->SetDlgItemTextW(editCtl, fileBuf);
 				ret = TRUE;
@@ -279,15 +317,19 @@ BOOL TBrowseDirDlgW::Exec()
 */
 int CALLBACK TBrowseDirDlgW::BrowseDirDlg_Proc(HWND hWnd, UINT uMsg, LPARAM lParam, LPARAM data)
 {
+	auto dlg = (TBrowseDirDlgW *)data;
+	if (!dlg) return 0;
+
 	switch (uMsg)
 	{
 	case BFFM_INITIALIZED:
-		((TBrowseDirDlgW *)data)->AttachWnd(hWnd);
+		dlg->AttachWnd(hWnd);
 		break;
 
 	case BFFM_SELCHANGED:
-		if (((TBrowseDirDlgW *)data)->hWnd)
-			((TBrowseDirDlgW *)data)->SetFileBuf(lParam);
+		if (dlg->hWnd) {
+			dlg->SetFileBuf(lParam);
+		}
 		break;
 	}
 	return 0;
@@ -306,7 +348,7 @@ BOOL TBrowseDirDlgW::AttachWnd(HWND _hWnd)
 		GetParentDirW(fileBuf, fileBuf);
 
 	LPITEMIDLIST pidl = ::ILCreateFromPathW(fileBuf);
-	SendMessageW(BFFM_SETSELECTION, FALSE, (LPARAM)pidl);
+	SendMessageW(BFFM_SETSELECTIONW, FALSE, (LPARAM)pidl);
 	ILFree(pidl);
 
 // ボタン作成
@@ -423,8 +465,29 @@ BOOL TBrowseDirDlgW::EvNotify(UINT ctlID, NMHDR *pNmHdr)
 	return	FALSE;
 }
 
+HWND FindSysTree(HWND hWnd)
+{
+	for (HWND hChild=::GetWindow(hWnd, GW_CHILD);
+		hChild; hChild=::GetWindow(hChild, GW_HWNDNEXT)) {
+		for (HWND hSubChild = ::GetWindow(hChild, GW_CHILD); hSubChild;
+			hSubChild = ::GetWindow(hSubChild, GW_HWNDNEXT)) {
+			WCHAR	wbuf[MAX_PATH];
+			if (GetClassNameW(hSubChild, wbuf, wsizeof(wbuf)) && !wcscmp(wbuf, WC_TREEVIEWW)) {
+				return	hSubChild;
+			}
+		}
+	}
+	return	NULL;
+}
+
 BOOL TBrowseDirDlgW::SetFileBuf(LPARAM list)
 {
+	if (auto hSysTree = FindSysTree(hWnd)) {
+		auto hRoot = TreeView_GetRoot(hSysTree);
+		auto hCur = TreeView_GetNextItem(hSysTree, hRoot, TVGN_CARET);
+		TreeView_EnsureVisible(hSysTree, hCur);
+	}
+
 	return	::SHGetPathFromIDListW((LPITEMIDLIST)list, fileBuf);
 }
 
@@ -491,9 +554,12 @@ BOOL TConfirmDlg::EvCreate(LPARAM lParam)
 
 	if (rect.left == CW_USEDEFAULT) {
 		GetWindowRect(&rect);
-		rect.left += 30, rect.right += 30;
-		rect.top += 30, rect.bottom += 30;
-		MoveWindow(rect.left, rect.top, rect.cx(), rect.cy(), FALSE);
+		rect.Slide(30, 30);
+		MoveWindow(rect.x(), rect.y(), rect.cx(), rect.cy(), FALSE);
+	}
+	else {
+		RestoreRectFromParent();
+		MoveWindow(rect.x(), rect.y(), rect.cx(), rect.cy(), FALSE);
 	}
 
 	Show();
@@ -551,6 +617,7 @@ BOOL TOpenFileDlg::Exec(UINT editCtl, WCHAR *title, WCHAR *filter, WCHAR *defaul
 				offset += wcscpyz(w() + dir_len, w() + offset);
 				pathArray.RegisterPath(w());
 			}
+			pathArray.Sort();
 			BOOL	tail = (flg & OFDLG_TAILCR) ? TRUE : FALSE;
 			int		len = pathArray.GetMultiPathLen(CRLF, NULW, tail);
 			vbuf.AllocBuf(len * sizeof(WCHAR *));
@@ -565,6 +632,7 @@ BOOL TOpenFileDlg::Exec(UINT editCtl, WCHAR *title, WCHAR *filter, WCHAR *defaul
 	auto	sep  = (flg & OFDLG_WITHQUOTE) ? L" " : NULW;
 	auto	tail = ((flg & OFDLG_WITHQUOTE) || !(flg & OFDLG_TAILCR)) ? FALSE : TRUE;
 
+	pathArray.Sort();
 	len = pathArray.GetMultiPathLen(CRLF, sep, tail);
 	vbuf.AllocBuf(len * sizeof(WCHAR));
 	pathArray.GetMultiPath(w(), (int)vbuf.Size(), CRLF, sep, tail);
@@ -578,7 +646,7 @@ BOOL TOpenFileDlg::Exec(UINT editCtl, WCHAR *title, WCHAR *filter, WCHAR *defaul
 #define OFN_ENABLESIZING 0x00800000
 #endif
 
-BOOL TOpenFileDlg::Exec(WCHAR *title, WCHAR *filter, WCHAR *defaultDir)
+BOOL TOpenFileDlg::Exec(WCHAR *title, WCHAR *filter, WCHAR *_defaultDir)
 {
 	OPENFILENAMEW	ofn = {};
 	WCHAR	szDirName[MAX_PATH] = L"";
@@ -607,6 +675,7 @@ BOOL TOpenFileDlg::Exec(WCHAR *title, WCHAR *filter, WCHAR *defaultDir)
 		vbuf.AllocBuf(MAX_OFNBUF * sizeof(WCHAR));
 	}
 
+	defaultDir = _defaultDir;
 	if (szDirName[0] == 0 && defaultDir)
 		wcscpy(szDirName, defaultDir);
 	memset(&ofn, 0, sizeof(ofn));
@@ -632,16 +701,18 @@ BOOL TOpenFileDlg::Exec(WCHAR *title, WCHAR *filter, WCHAR *defaultDir)
 	BOOL	ret = (openMode == OPEN || openMode == MULTI_OPEN) ?
 				 ::GetOpenFileNameW(&ofn) : ::GetSaveFileNameW(&ofn);
 
-	::SetCurrentDirectoryW(orgDir);
 	if (ret) {
 //		if (openMode == MULTI_OPEN)
 //			memcpy(w(), szFile, MAX_WPATH * sizeof(WCHAR));
 //		else
 //			wcscpy(w(), ofn.lpstrFile);
 
-		if (defaultDir)
+		if (defaultDir) {
 			wcscpy(defaultDir, ofn.lpstrFile);
+		}
 	}
+
+	::SetCurrentDirectoryW(orgDir);
 
 	return	ret;
 }
@@ -654,36 +725,49 @@ UINT WINAPI TOpenFileDlg::OpenFileDlgProc(HWND hdlg, UINT msg, WPARAM wParam, LP
 		return TRUE;
 
 	case WM_NOTIFY:
-		if (NMHDR *nh = (NMHDR *)lParam) {
-			Debug("notify=%d\n", nh->code - CDN_FIRST);
-			if (nh->code == CDN_SELCHANGE) {
-				auto	ont = (OFNOTIFYW *)lParam;
-				auto	ofn = ont->lpOFN;
-				auto	dlg = (TOpenFileDlg *)(ofn->lCustData);
-				LRESULT	dlen = dlg->SendMessageW(CDM_GETFOLDERPATH, 0, 0);
-				LRESULT	flen = dlg->SendMessageW(CDM_GETSPEC, 0, 0);
-				size_t	need = (dlen + flen + MAX_PATH) * sizeof(WCHAR);
-
-				if (dlg->vbuf.Size() < need) {
-					dlg->vbuf.AllocBuf(need);
-					ofn->lpstrFile = dlg->vbuf.WBuf();
-					ofn->nMaxFile = (DWORD)dlg->vbuf.Size();
-					Debug("size %zd\n", need);
-				}
-
-//				dlg->SendMessageW(CDM_GETFOLDERPATH, need/2, (LPARAM)dlg->vbuf.Buf());
-//				DebugW(L"dir=%s\n", dlg->vbuf.WBuf());
-//				dlg->SendMessageW(CDM_GETSPEC, need/2, (LPARAM)dlg->vbuf.Buf());
-//				DebugW(L"file=%s\n", dlg->vbuf.WBuf());
-
-				return	0;
+		if (auto ont = (OFNOTIFYW *)lParam) {
+			if (auto dlg = (TOpenFileDlg *)(ont->lpOFN->lCustData)) {
+				return	dlg->NotifyProc(ont);
 			}
 		}
 	}
 	return FALSE;
 }
 
-int CalcLineCx(HDC hDc, const WCHAR *s)
+
+UINT TOpenFileDlg::NotifyProc(OFNOTIFYW *ont)
+{
+	DBG("notify=%d\n", ont->hdr.code - CDN_FIRST);
+	if (ont->hdr.code != CDN_SELCHANGE && ont->hdr.code != CDN_FOLDERCHANGE) {
+		return 0;
+	}
+
+	auto	ofn = ont->lpOFN;
+	LRESULT	dlen = SendMessageW(CDM_GETFOLDERPATH, 0, 0);
+	LRESULT	flen = SendMessageW(CDM_GETSPEC, 0, 0);
+	size_t	need = (dlen + flen + MAX_PATH) * sizeof(WCHAR);
+
+	if (vbuf.Size() < need) {
+		vbuf.AllocBuf(need);
+		ofn->lpstrFile = vbuf.WBuf();
+		ofn->nMaxFile = (DWORD)vbuf.Size();
+		DBG("size %zd\n", need);
+	}
+
+	SendMessageW(CDM_GETFOLDERPATH, need / 2, (LPARAM)vbuf.Buf());
+	DBGW(L"dir=%s\n", vbuf.WBuf());
+
+	if (defaultDir && (flg & OFDLG_CHDIRREFLECT)) {
+		wcscpy(defaultDir, vbuf.WBuf());
+	}
+
+	SendMessageW(CDM_GETSPEC, need / 2, (LPARAM)vbuf.Buf());
+		DBGW(L"file=%s\n", vbuf.WBuf());
+
+	return	0;
+}
+	
+	int CalcLineCx(HDC hDc, const WCHAR *s)
 {
 	int		cx = 0;
 
@@ -788,7 +872,7 @@ BOOL TOpenFileDlg::EventApp(UINT uMsg, WPARAM wParam, LPARAM lParam)
 		int	need_size = base_size + sz.cx - 70;
 
 		if (rect.cx() < need_size) {
-			MoveWindow(rect.left, rect.top, need_size, rect.cy(), TRUE);
+			MoveWindow(rect.x(), rect.y(), need_size, rect.cy(), TRUE);
 			GetWindowRect(&rect);
 		}
 
@@ -845,12 +929,13 @@ BOOL TJobDlg::EvCreate(LPARAM lParam)
 {
 	WCHAR	buf[MAX_PATH];
 
-	if (rect.left == CW_USEDEFAULT)
-	{
+	if (rect.left == CW_USEDEFAULT) {
 		GetWindowRect(&rect);
-		int xsize = rect.right - rect.left;
-		int	ysize = rect.bottom - rect.top;
-		MoveWindow(rect.left + 30, rect.top + 50, xsize, ysize, FALSE);
+		MoveWindow(rect.x() + 30, rect.y() + 50, rect.cx(), rect.cy(), FALSE);
+	}
+	else {
+		RestoreRectFromParent();
+		MoveWindow(rect.x(), rect.y(), rect.cx(), rect.cy(), FALSE);
 	}
 
 	for (int i=0; i < cfg->jobMax; i++)
@@ -926,6 +1011,7 @@ BOOL TJobDlg::AddJob()
 	mainParent->GetDlgItemTextW(SRC_EDIT, src_buf, srcbuf_len);
 	PathArray	srcArray;
 	srcArray.RegisterMultiPath(src_buf, CRLF);
+	srcArray.Sort();
 	int		src_len = srcArray.GetMultiPathLen();
 	if (src_len >= MAX_HISTORY_BUF) {
 		TMsgBox(this).Exec("Source is too long (max.8192 chars)");
@@ -972,9 +1058,10 @@ BOOL TJobDlg::AddJob()
 
 BOOL TJobDlg::DelJob()
 {
-	WCHAR	buf[MAX_PATH], msg[MAX_PATH];
+	WCHAR	buf[MAX_PATH];
 
 	if (GetDlgItemTextW(TITLE_COMBO, buf, MAX_PATH) > 0) {
+		WCHAR	msg[MAX_PATH];
 		int idx = cfg->SearchJobW(buf);
 		swprintf(msg, LoadStrW(IDS_JOBNAME), buf);
 		if (idx >= 0
@@ -1001,12 +1088,13 @@ TFinActDlg::TFinActDlg(Cfg *_cfg, TMainDlg *_parent) : TDlg(FINACTION_DIALOG, _p
 
 BOOL TFinActDlg::EvCreate(LPARAM lParam)
 {
-	if (rect.left == CW_USEDEFAULT)
-	{
+	if (rect.left == CW_USEDEFAULT) {
 		GetWindowRect(&rect);
-		int xsize = rect.right - rect.left;
-		int	ysize = rect.bottom - rect.top;
-		MoveWindow(rect.left + 30, rect.top + 50, xsize, ysize, FALSE);
+		MoveWindow(rect.x() + 30, rect.y() + 50, rect.cx(), rect.cy(), FALSE);
+	}
+	else {
+		RestoreRectFromParent();
+		MoveWindow(rect.x(), rect.y(), rect.cx(), rect.cy(), FALSE);
 	}
 
 	for (int i=0; i < cfg->finActMax; i++) {
@@ -1123,7 +1211,6 @@ BOOL TFinActDlg::AddFinAct()
 	WCHAR	title[MAX_PATH];
 	WCHAR	sound[MAX_PATH];
 	WCHAR	command[MAX_PATH_EX];
-	WCHAR	buf[MAX_PATH];
 
 	if (GetDlgItemTextW(TITLE_COMBO, title, MAX_PATH) <= 0 || wcsicmp(title, L"FALSE") == 0)
 		return	FALSE;
@@ -1154,6 +1241,7 @@ BOOL TFinActDlg::AddFinAct()
 	}
 
 	if (finAct.flags & (FinAct::SUSPEND|FinAct::HIBERNATE|FinAct::SHUTDOWN)) {
+		WCHAR	buf[MAX_PATH];
 		finAct.flags |= (IsDlgButtonChecked(FORCE_CHECK) ? FinAct::FORCE : 0);
 		finAct.flags |= (IsDlgButtonChecked(SHUTDOWNERR_CHECK) ? FinAct::ERR_SHUTDOWN : 0);
 		finAct.shutdownTime = 60;
@@ -1176,9 +1264,10 @@ BOOL TFinActDlg::AddFinAct()
 
 BOOL TFinActDlg::DelFinAct()
 {
-	WCHAR	buf[MAX_PATH], msg[MAX_PATH];
+	WCHAR	buf[MAX_PATH];
 
 	if (GetDlgItemTextW(TITLE_COMBO, buf, MAX_PATH) > 0) {
+		WCHAR	msg[MAX_PATH];
 		int idx = cfg->SearchFinActW(buf);
 		swprintf(msg, LoadStrW(IDS_FINACTNAME), buf);
 		if (cfg->finActArray[idx]->flags & FinAct::BUILTIN) {
@@ -1216,12 +1305,13 @@ TMsgBox::~TMsgBox()
 */
 BOOL TMsgBox::EvCreate(LPARAM lParam)
 {
-	if (rect.left == CW_USEDEFAULT)
-	{
+	if (rect.left == CW_USEDEFAULT) {
 		GetWindowRect(&rect);
-		int xsize = rect.right - rect.left;
-		int	ysize = rect.bottom - rect.top;
-		MoveWindow(rect.left + 30, rect.top + 50, xsize, ysize, FALSE);
+		MoveWindow(rect.x() + 30, rect.y() + 50, rect.cx(), rect.cy(), FALSE);
+	}
+	else {
+		RestoreRectFromParent();
+		MoveWindow(rect.x(), rect.y(), rect.cx(), rect.cy(), FALSE);
 	}
 
 	if (isExecW) {
@@ -1385,7 +1475,7 @@ BOOL TListHeader::EventUser(UINT uMsg, WPARAM wParam, LPARAM lParam)
 	if (uMsg == HDM_LAYOUT) {
 		HD_LAYOUT *hl = (HD_LAYOUT *)lParam;
 		::CallWindowProcW((WNDPROC)oldProc, hWnd, uMsg, wParam, lParam);
-//		Debug("HDM_LAYOUT(USER)2 top:%d/bottom:%d diff:%d cy:%d y:%d\n",
+//		DBG("HDM_LAYOUT(USER)2 top:%d/bottom:%d diff:%d cy:%d y:%d\n",
 //			hl->prc->top, hl->prc->bottom, hl->prc->bottom - hl->prc->top,
 //			hl->pwpos->cy, hl->pwpos->y);
 
@@ -1409,7 +1499,7 @@ BOOL TListHeader::ChangeFontNotify()
 	if (::GetObject(hFont, sizeof(LOGFONT), (void *)&logFont) == 0)
 		return	FALSE;
 
-//	Debug("lfHeight=%d\n", logFont.lfHeight);
+	DBG("lfHeight=%d\n", logFont.lfHeight);
 	return	TRUE;
 }
 
@@ -1621,7 +1711,7 @@ BOOL TSrcEdit::AttachWnd(HWND _hWnd)
 	}
 
 //	HDC		hDc = ::GetDC(hWnd);
-//	Debug("base=%d lf=%d caps=%d, rc=%d\n",
+//	DBG("base=%d lf=%d caps=%d, rc=%d\n",
 //		baseCy, lf.lfHeight, GetDeviceCaps(hDc, LOGPIXELSY), orgRect.cy());
 //	::ReleaseDC(hWnd, hDc);
 
@@ -1638,16 +1728,19 @@ int char_num(const WCHAR *str, WCHAR ch)
 	return	cnt;
 }
 
-int TSrcEdit::NeedDiffY()
+int TSrcEdit::NeedDiffY(int *real_diff)
 {
 	int		len = GetWindowTextLengthW() + 1;
 	Wstr	wstr(len);
 
 	if (GetWindowTextW(wstr.Buf(), len)) {
-		int		crnum = max(min(char_num(wstr.s(), L'\n') + 1, maxCr), 2);
-		int		needCy = baseCy * crnum + marginCy;
+		int		crnum = char_num(wstr.s(), L'\n') + 1;
+		int		crmax = max(min(crnum, maxCr), 2);
+		int		needCy = baseCy * crmax + marginCy;
+		int		realCy = baseCy * crnum + marginCy;
 
-	//	Debug("need=%d org=%d cr=%d\n", needCy, orgRect.cy(), crnum);
+		*real_diff = realCy - orgRect.cy();
+	//	DBG("need=%d org=%d cr=%d\n", needCy, orgRect.cy(), crnum);
 
 		return	max(needCy - orgRect.cy(), 0);
 	}
@@ -1656,13 +1749,22 @@ int TSrcEdit::NeedDiffY()
 
 void TSrcEdit::Fit(BOOL allow_reduce)
 {
-	int	diff = NeedDiffY();
+	int	real = 0;
+	int	diff = NeedDiffY(&real);
 
 	GetWindowRect(&rect);
 	int	cur_diff = rect.cy() - orgRect.cy();
 
-	if (diff > cur_diff || allow_reduce && diff != cur_diff) {
-	//	Debug("fit %d %d\n", diff, cur_diff);
+	if (allow_reduce && cur_diff > diff) {
+		if (cur_diff > real) {
+			diff = real;
+		} else {
+			diff = cur_diff;
+		}
+	}
+
+	if (diff > cur_diff || allow_reduce && diff < cur_diff) {
+	//	DBG("fit %d %d\n", diff, cur_diff);
 		parent->PostMessage(WM_FASTCOPY_RESIZESRCEDIT, 0, diff);
 	}
 }
@@ -1676,7 +1778,7 @@ BOOL TSrcEdit::EvChar(WCHAR code, LPARAM keyData)
 
 	case 0x01: // Control-A
 		SendMessage(EM_SETSEL, 0, -1);
-		Debug("send emsetsel\n");
+		DBG("send emsetsel\n");
 		break;
 	}
 	return	FALSE;

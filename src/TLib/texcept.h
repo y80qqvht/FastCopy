@@ -36,6 +36,10 @@ BOOL ExTrace(const char *fmt,...);
 void ForceFlushExceptionLog();
 BOOL InstallExceptionFilter(const char *title, const char *info, const char *fname=NULL,
 	const char *dump=NULL, DWORD dump_flags=0);
+BOOL RegisterDumpExceptArea(void *ptr, size_t size);
+BOOL ModifyDumpExceptArea(void *ptr, size_t size);
+BOOL RemoveDumpExceptArea(void *ptr);
+void InitDumpExceptArea();
 
 enum { ODC_ALLOC=0, ODC_PARENT=1, ODC_NONE=2 };
 void OpenDebugConsole(DWORD odc_mode=ODC_ALLOC);
@@ -57,6 +61,15 @@ inline void NullFunc() {}
 #define Trc(...) (DebugConsoleEnabled() ? Debug(__VA_ARGS__) : NullFunc())
 #define TrcU8(...) (DebugConsoleEnabled() ? DebugU8(__VA_ARGS__) : NullFunc())
 
+#if defined(_DEBUG)
+#define DBG  Debug
+#define DBGW DebugW
+#define DBG8 DebugU8
+#else
+#define DBG(...)  NullFunc()
+#define DBGW(...) NullFunc()
+#define DBG8(...) NullFunc()
+#endif
 
 #endif
 

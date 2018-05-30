@@ -22,14 +22,12 @@ template<class T> class THashTblT;
 template<class T>
 class THashObjT {
 public:
-	THashObjT	*prevHash;
-	THashObjT	*nextHash;
-	T			hashId;
+	THashObjT	*prevHash = NULL;
+	THashObjT	*nextHash = NULL;
+	T			hashId    = 0;
 
 public:
 	THashObjT() {
-		prevHash = nextHash = NULL;
-		hashId = 0;
 	}
 	virtual ~THashObjT() {
 		if (prevHash && prevHash != this) {
@@ -117,6 +115,10 @@ public:
 		if (obj->UnlinkHash()) {
 			registerNum--;
 		}
+	}
+	virtual void Reset() {
+		UnInit();
+		Init(hashNum);
 	}
 	virtual THashObjT<T> *Search(const void *data, T hash_id) {
 		auto top = hashTbl + (hash_id % hashNum);
@@ -209,16 +211,16 @@ public:
 class VBuf {
 protected:
 	BYTE	*buf;
-	VBuf	*borrowBuf;
 	size_t	size;
 	size_t	usedSize;
 	size_t	maxSize;
+	BOOL	dumpExcept;
 	void	Init();
 
 public:
-	VBuf(size_t _size=0, size_t _max_size=0, VBuf *_borrowBuf=NULL);
+	VBuf(size_t _size=0, size_t _max_size=0);
 	~VBuf();
-	BOOL	AllocBuf(size_t _size, size_t _max_size=0, VBuf *_borrowBuf=NULL);
+	BOOL	AllocBuf(size_t _size, size_t _max_size=0);
 	BOOL	LockBuf();
 	void	FreeBuf();
 	BOOL	Grow(size_t grow_size);
@@ -236,6 +238,7 @@ public:
 	size_t	AddUsedSize(size_t _used_size) { return usedSize += _used_size; }
 	size_t	RemainSize(void) const { return size - usedSize; }
 	VBuf& operator =(const VBuf&); // prohibit
+	void	EnableDumpExcept(BOOL on=TRUE) { dumpExcept = on; }
 };
 
 template <class T>
@@ -335,10 +338,10 @@ public:
 
 class GBuf {
 protected:
-	HGLOBAL	hGlobal;
-	BYTE	*buf;
-	size_t	size;
-	UINT	flags;
+	HGLOBAL	hGlobal = NULL;
+	BYTE	*buf = NULL;
+	size_t	size = 0;
+	UINT	flags = 0;
 
 public:
 	GBuf(size_t _size=0, BOOL with_lock=TRUE, UINT _flags=GMEM_MOVEABLE) {
@@ -354,8 +357,7 @@ public:
 		UnInit();
 	}
 	BOOL Init(size_t _size=0, BOOL with_lock=TRUE, UINT _flags=GMEM_MOVEABLE) {
-		hGlobal	= NULL;
-		buf		= NULL;
+		UnInit();
 		flags	= _flags;
 
 		if ((size = _size) == 0) {
@@ -378,6 +380,7 @@ public:
 		}
 		buf		= NULL;
 		hGlobal	= NULL;
+		size	= 0;
 	}
 	HGLOBAL	Handle() {
 		return hGlobal;
@@ -722,6 +725,9 @@ const WCHAR *TGetExeDirW(WCHAR *buf=NULL);
 enum TLoadType { TLT_SYSDIR, TLT_EXEDIR };
 HMODULE TLoadLibraryExW(const WCHAR *dll, TLoadType t);
 
+BOOL TGetIntegrityLevel(DWORD *ilv);
+BOOL TIsLowIntegrity();
+
 class TWin;
 class OpenFileDlg {
 public:
@@ -757,6 +763,12 @@ BOOL DeleteLinkW(const WCHAR *link);
 BOOL DeleteLinkU8(const char *link);
 BOOL GetParentDirW(const WCHAR *srcfile, WCHAR *dir);
 BOOL GetParentDirU8(const char *srcfile, char *dir);
+
+BOOL MakeDirU8(char *dir);
+BOOL MakeDirW(WCHAR *dir);
+BOOL MakeDirAllU8(char *dir);
+BOOL MakeDirAllW(WCHAR *dir);
+
 HWND ShowHelpW(HWND hOwner, WCHAR *help_dir, WCHAR *help_file, WCHAR *section=NULL);
 HWND ShowHelpU8(HWND hOwner, const char *help_dir, const char *help_file, const char *section=NULL);void UnInitShowHelp();
 
@@ -767,7 +779,10 @@ BOOL TSetClipBoardTextW(HWND hWnd, const WCHAR *s, int len=-1);
 
 HBITMAP TIconToBmp(HICON hIcon, int cx, int cy);
 
+enum TrayMode { TIS_NONE, TIS_HIDE, TIS_SHOW, TIS_ALL };
 BOOL ForceSetTrayIcon(HWND hWnd, UINT id, DWORD pref=2);
+TrayMode GetTrayIconState();
+
 BOOL SetWinAppId(HWND hWnd, const WCHAR *app_id);
 BOOL IsWineEnvironment();
 

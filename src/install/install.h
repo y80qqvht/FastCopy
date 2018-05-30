@@ -23,6 +23,7 @@ struct InstallCfg {
 	WCHAR		*virtualDir;
 	WCHAR		*startMenu;
 	WCHAR		*deskTop;
+	Wstr		setuped;
 };
 
 class TInstSheet : public TDlg
@@ -44,8 +45,12 @@ class TInstDlg : public TDlg
 {
 protected:
 	TSubClassCtl	staticText;
-	TInstSheet		*propertySheet;
+	TSubClassCtl	extractBtn;
+	TSubClassCtl	startBtn;
+	TInstSheet		*propertySheet = NULL;
 	InstallCfg		cfg;
+	IPDict			ipDict;
+	U8str           ver;
 
 public:
 	TInstDlg(char *cmdLine);
@@ -61,6 +66,7 @@ public:
 	BOOL	UnInstall(void);
 	BOOL	RunAsAdmin(BOOL is_imme);
 	void	ChangeMode(void);
+	void	Extract(void);
 	void	Exit(DWORD exit_code);
 	BOOL	RemoveSameLink(const WCHAR *dir, WCHAR *remove_path=NULL);
 };
@@ -77,8 +83,8 @@ public:
 class TBrowseDirDlg : public TSubClass
 {
 protected:
-	WCHAR	*fileBuf;
-	BOOL	dirtyFlg;
+	WCHAR	*fileBuf = NULL;
+	BOOL	dirtyFlg = FALSE;
 
 public:
 	TBrowseDirDlg(WCHAR *_fileBuf) { fileBuf = _fileBuf; }
@@ -126,6 +132,10 @@ public:
 #define SHELLEXT4_DLL		L"FastCopy_shext4.dll"
 #define FCSHELLEXT1_DLL		L"FastExt1.dll"
 #define FCSHELLEX64_DLL		L"FastEx64.dll"
+#define FASTCOPY_INI		L"FastCopy2.ini"
+#define FASTCOPY_LINK		L"to_ExeDir.lnk"
+#define FASTCOPY_LOG		L"FastCopy.log"
+#define FASTCOPY_LOGDIR		L"Log"
 
 #ifdef _WIN64
 #define CURRENT_SHEXTDLL	FCSHELLEX64_DLL
@@ -156,7 +166,7 @@ public:
 #define HSTOOLS_STR			"HSTools"
 
 // function prototype
-void BrowseDirDlg(TWin *parentWin, UINT editCtl, WCHAR *title);
+BOOL BrowseDirDlg(TWin *parentWin, UINT editCtl, const WCHAR *title);
 int CALLBACK BrowseDirDlg_Proc(HWND hWnd, UINT uMsg, LPARAM lParam, LPARAM data);
 
 // inline function
@@ -172,6 +182,7 @@ BOOL GetIPDictBySelf(IPDict *dict);
 #define FDATA_KEY	"fdata"
 #define MTIME_KEY	"mtime"
 #define FSIZE_KEY	"fsize"
+#define VER_KEY		"ver"
 
 #endif
 
