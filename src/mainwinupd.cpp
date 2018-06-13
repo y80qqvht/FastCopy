@@ -1,5 +1,5 @@
 ﻿static char *mainwinupd_id = 
-	"@(#)Copyright (C) 2017-2018 H.Shirouzu		mainwinupd.cpp	ver3.41";
+	"@(#)Copyright (C) 2017-2018 H.Shirouzu		mainwinupd.cpp	ver3.51";
 /* ========================================================================
 	Project  Name			: Fast/Force copy file and directory
 	Create					: 2004-09-15(Wed)
@@ -14,6 +14,12 @@
 using namespace std;
 
 static BOOL IsSilent = FALSE;
+
+//#define UPDATE_DBG
+#ifdef UPDATE_DBG
+#undef  FASTCOPY_UPDATEINFO
+#define FASTCOPY_UPDATEINFO	"fastcopy-update-tmp.dat"
+#endif
 
 void TMainDlg::UpdateCheck(BOOL is_silent)
 {
@@ -111,8 +117,8 @@ void TMainDlg::UpdateCheckRes(TInetReqReply *_irr)
 		return;
 	}
 
-	if (MessageBox(Fmt(LoadStr(IDS_UPDFMT_UPDMSG), updData.ver.s()), FASTCOPY,
-		MB_OKCANCEL) == IDOK) {
+	if ((IsSilent && (::IsUserAnAdmin() || !TIsVirtualizedDirW(cfg.execDir))) ||
+	MessageBox(Fmt(LoadStr(IDS_UPDFMT_UPDMSG), updData.ver.s()), FASTCOPY, MB_OKCANCEL) == IDOK) {
 		TInetAsync(FASTCOPY_SITE, updData.path.s(), hWnd, WM_FASTCOPY_UPDDLRES);
 	}
 }
