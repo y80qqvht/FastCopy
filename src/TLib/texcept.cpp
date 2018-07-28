@@ -158,6 +158,32 @@ void DebugU8(const char *fmt,...)
 	}
 }
 
+void OutW(const WCHAR *fmt,...)
+{
+	if (!hStdOut) return;
+
+	va_list	ap;
+	va_start(ap, fmt);
+
+	DWORD len = vsnwprintfz(NULL, 0, fmt, ap) + 1;
+
+	Wstr	w(len);
+
+	len = vsnwprintfz(w.Buf(), len, fmt, ap);
+	va_end(ap);
+
+	DWORD	wlen = w.Len();
+
+	if (!::WriteConsoleW(hStdOut, w.s(), wlen, &wlen, 0)) {
+		U8str	u8(w);
+		DWORD	len = u8.Len() * 2 + 1;
+		U8str	u8cr(len);
+
+		len = UnixNewLineToLocal(u8.s(), u8cr.Buf(), len);
+		::WriteFile(hStdOut, u8cr.s(), len, &len, 0);
+	}
+}
+
 #define FMT_BUF_NUM		8		// 2^n
 #define FMT_BUF_SIZE	8192
 
@@ -320,7 +346,7 @@ BOOL RegisterDumpExceptArea(void *ptr, size_t size)
 	area.ptr  = ptr;
 	area.size = size;
 
-	DBG("RegisterDumpExceptArea (%d %p %zx)\n", DumpExceptAreaIdx, ptr, size);
+	//DBG("RegisterDumpExceptArea (%d %p %zx)\n", DumpExceptAreaIdx, ptr, size);
 
 	DumpExceptAreaIdx++;
 
@@ -337,11 +363,11 @@ BOOL ModifyDumpExceptArea(void *ptr, size_t size)
 		auto	&area = DumpExceptArea[i];
 		if (area.ptr == ptr) {
 			area.size = size;
-			DBG("ModifyDumpExceptArea (%d %p %zx)\n", i, ptr, size);
+			//DBG("ModifyDumpExceptArea (%d %p %zx)\n", i, ptr, size);
 			return	TRUE;
 		}
 	}
-	DBG("ModifyDumpExceptArea not found (%p %zx)\n", ptr, size);
+	//DBG("ModifyDumpExceptArea not found (%p %zx)\n", ptr, size);
 	return	FALSE;
 }
 
@@ -354,7 +380,7 @@ BOOL RemoveDumpExceptArea(void *ptr)
 	for (int i=0; i < DumpExceptAreaIdx; i++) {
 		auto	&area = DumpExceptArea[i];
 		if (area.ptr == ptr) {
-			DBG("RemoveDumpExceptArea (%d %p %zx)\n", i, ptr, area.size);
+			//DBG("RemoveDumpExceptArea (%d %p %zx)\n", i, ptr, area.size);
 			memmove(&area, &area + 1, sizeof(area) * (DumpExceptAreaIdx - i -1));
 			DumpExceptAreaIdx--;
 			return	TRUE;
@@ -366,7 +392,7 @@ BOOL RemoveDumpExceptArea(void *ptr)
 
 void InitDumpExceptArea()
 {
-	DBG("InitDumpExceptArea\n");
+	//DBG("InitDumpExceptArea\n");
 	DumpExceptAreaIdx = 0;
 }
 
