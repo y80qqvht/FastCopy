@@ -1,6 +1,7 @@
 ﻿======================================================================
-                     FastCopy  ver3.54                 2018/08/09
+                     FastCopy  ver3.60                 2018/11/04
                                             H.Shirouzu（白水啓章）
+                                            FastCopy Lab, LLC.
 ======================================================================
 
 特徴：
@@ -32,7 +33,8 @@
 
 ライセンス：
 	FastCopy ver3.x
-	  Copyright(C) 2004-2018 SHIROUZU Hiroaki All rights reserved.
+	  Copyright(C) 2004-2018 SHIROUZU Hiroaki
+	    and FastCopy Lab, LLC. All rights reserved.
 
 	  全ソースコードは GPLv3 で公開しています。
 	  VC++ 等をお持ちであれば、カスタマイズしてのご利用も可能です。
@@ -43,7 +45,7 @@
 	  more details: external/xxhash/LICENSE
 
 使用法等：
-	ヘルプ(fastcopy.chm) を参照してください。
+	ヘルプ(fastcopy.htm) を参照してください。
 
 ソース・ビルドについて：
 	VS2017 以降でビルドできます。

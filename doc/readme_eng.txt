@@ -1,6 +1,7 @@
 ﻿======================================================================
-                   FastCopy  ver3.54                   2018/08/09
+                   FastCopy  ver3.60                   2018/11/04
                                                  SHIROUZU Hiroaki
+                                                 FastCopy Lab, LLC.
 ======================================================================
 
 	FastCopy is the Fastest Copy/Delete Software on Windows.
@@ -17,6 +18,7 @@ License:
 	-------------------------------------------------------------------------
 	 FastCopy ver3.x
 	 Copyright(C) 2004-2018 SHIROUZU Hiroaki All rights reserved.
+	 Copyright(C) 2018 FastCopy Lab, LLC. All rights reserved.
 
 	 This program is free software. You can redistribute it and/or modify
 	 it under the GNU General Public License version 3.
@@ -28,7 +30,7 @@ License:
 	  more details: external/xxhash/LICENSE
 
 Usage：
-	Please see fastcopy.chm
+	Please see fastcopy_eng.htm
 
 Build:
 	VS2017 or later
